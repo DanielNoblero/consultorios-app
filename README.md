@@ -1,16 +1,85 @@
-# React + Vite
+# 🧠 Analyse — Sistema Profesional de Reservas de Consultorios Psicológicos
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Analyse es una plataforma web desarrollada en **React + Firebase** que permite a psicólogos y profesionales de la salud reservar consultorios de forma rápida, segura y organizada.  
+Incluye gestión automática de horarios, control de pagos, historial, panel administrativo y reportes mensuales.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🚀 Funcionalidades Principales
 
-## React Compiler
+### 👤 **Usuarios / Profesionales**
+- Registro con **Email/Password** o **Google**  
+- Completar y editar perfil profesional  
+- Reservar consultorios por día y hora  
+- Sistema de **cancelación con más de 24 horas de anticipación**  
+- Visualización de:
+  - Próximas reservas  
+  - Deuda semanal  
+  - Deuda mensual  
+  - Historial completo de reservas  
+- Interfaz moderna, clara y adaptada para **celular** y escritorio
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🛠️ **Panel Administrativo**
+Solo disponible para usuarios con rol **admin**.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Incluye:
+- Gestión completa de reservas
+- Ajuste del precio base de las sesiones
+- Visualización de reservas por profesional
+- Generación de **reporte mensual en Excel**:
+  - Agrupado por profesional  
+  - Total por profesional  
+  - Total general  
+  - Incluye limpieza automática de reservas pagas del mes anterior  
+
+---
+
+## 📅 **Sistema de Reservas Avanzado**
+
+### ✔ Horarios dinámicos con reglas inteligentes:
+- Calcula disponibilidad real  
+- Evita superposición de horarios  
+- Bloquea horarios pasados  
+- Bloquea horarios que terminarían después de las **22:00**  
+- Distinción por colores:
+  - 🟢 Disponible  
+  - 🔴 Ocupado  
+  - ⏳ Pasado  
+
+### 🗓 Calendario personalizado:
+- Navegación por meses  
+- Días ocupados resaltados  
+- Día seleccionado marcado visualmente  
+- Totalmente adaptado al estilo del sistema
+
+---
+
+## 💸 Sistema de Precios y Pagos
+
+- Precio global configurable desde el panel admin  
+- Cada reserva tiene un precio asignado  
+- Cálculo automático de:
+  - Total semanal
+  - Total mensual
+- Estado de pago por reserva:
+  - “Pendiente”
+  - “Pagado”
+
+---
+
+## 🧩 Tecnologías Utilizadas
+
+| Tecnología | Uso |
+|-----------|-----|
+| **React + Vite** | Interfaz moderna y rendimiento optimizado |
+| **TailwindCSS** | Estilos rápidos, limpios y responsivos |
+| **Firebase Auth** | Registro y login seguro |
+| **Firestore** | Base de datos en tiempo real |
+| **Firebase Storage** | Guardado seguro de imágenes |
+| **Firebase Functions** | Lógica backend (reportes, limpieza, admin) |
+| **ExcelJS** | Generación del reporte mensual |
+| **React DatePicker** | Selección visual de fechas |
+
+---
