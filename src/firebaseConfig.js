@@ -1,17 +1,16 @@
-// src/firebaseConfig.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyD9trmZZvtBDk4FFJPdU4EFm6ffpkRnVEc",
-    authDomain: "consultorio-4e6c5.firebaseapp.com",
-    projectId: "consultorio-4e6c5",
-    storageBucket: "consultorio-4e6c5.appspot.com", // ← 🔥 CORREGIDO
-    messagingSenderId: "399757104061",
-    appId: "1:399757104061:web:041a12ff17e3592a7378d4",
-    measurementId: "G-DTDGQ9YL9T",
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
