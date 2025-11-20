@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+.react-datepicker {
+    font-family: 'Segoe UI', sans-serif !important;
+    border: 2px solid #60a5fa !important;
+    border-radius: 12px !important;
+}
+
+.react-datepicker__header {
+    background-color: #3b82f6 !important;
+    /* azul */
+    color: white !important;
+    border-bottom: none !important;
+}
+
+.react-datepicker__day--selected {
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
+.react-datepicker__day--keyboard-selected {
+    background-color: #60a5fa !important;
+}
+
+.react-datepicker__day:hover {
+    background-color: #bfdbfe !important;
+}
+
+/* Día ocupado (rojo) */
+.react-datepicker__day.ocupada {
+    background-color: #ef4444 !important;
+    color: white !important;
+    border-radius: 50% !important;
+}
+
+/* Día disponible (verde) */
+.react-datepicker__day.disponible {
+    background-color: #22c55e !important;
+    color: white !important;
+    border-radius: 50% !important;
+}
+
+/* Hover */
+.react-datepicker__day:hover {
+    filter: brightness(90%);
+}
+
+@keyframes slide-in {
+    0% {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.animate-slide-in {
+    animation: slide-in 0.3s ease-out forwards;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-slideDown {
+    animation: slideDown 0.25s ease-out;
+}
+.dia-seleccionado {
+    background-color: #bfdbfe !important;
+    border: 2px solid #3b82f6 !important;
+    color: #1e40af !important;
+    border-radius: 8px !important;
+}
