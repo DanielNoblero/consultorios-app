@@ -1,9 +1,16 @@
 import { db } from "../firebaseConfig";
-import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc } from "firebase/firestore";
+import {
+    collection,
+    query,
+    where,
+    getDocs,
+    doc,
+    getDoc,
+    addDoc,
+    updateDoc,
+} from "firebase/firestore";
 
-/**
- * 🔹 Obtiene los precios configurados desde Firestore
- */
+// ---------- getPreciosConfig ---------
 export const getPreciosConfig = async () => {
     try {
         const ref = doc(db, "configuracion", "precioConsulta");
@@ -21,9 +28,7 @@ export const getPreciosConfig = async () => {
     return { precioBase: 250, precioDescuento: 230 };
 };
 
-/**
- * 🔹 Devuelve el lunes de la semana de una fecha
- */
+// ---------- getMonday ----------
 export const getMonday = (date) => {
     const d = new Date(date);
     const day = d.getDay();
@@ -33,9 +38,7 @@ export const getMonday = (date) => {
     return monday;
 };
 
-/**
- * 🔹 Devuelve el domingo de la semana de una fecha
- */
+// ---------- getSunday ----------
 export const getSunday = (date) => {
     const lunes = getMonday(date);
     const domingo = new Date(lunes);
@@ -44,11 +47,10 @@ export const getSunday = (date) => {
     return domingo;
 };
 
-/**
- * 🔹 Trae todas las reservas de un usuario
- */
+// ---------- traerReservasUsuario ----------
 export const traerReservasUsuario = async (userId) => {
     if (!userId) return [];
+
     try {
         const q = query(collection(db, "reservas"), where("usuarioId", "==", userId));
         const snapshot = await getDocs(q);
@@ -58,8 +60,8 @@ export const traerReservasUsuario = async (userId) => {
             return {
                 id: d.id,
                 ...d.data(),
-                fecha: fechaStr, // string para render
-                fechaObj: new Date(`${fechaStr}T00:00:00`) // Date para cálculos
+                fecha: fechaStr,
+                fechaObj: new Date(`${fechaStr}T00:00:00`),
             };
         });
     } catch (error) {
@@ -68,9 +70,7 @@ export const traerReservasUsuario = async (userId) => {
     }
 };
 
-/**
- * 🔹 Función auxiliar para actualizar el precio de una reserva en Firestore
- */
+// ---------- updateReservationPrice ----------
 const updateReservationPrice = async (id, newPrice) => {
     if (!id) return;
     try {
@@ -81,10 +81,8 @@ const updateReservationPrice = async (id, newPrice) => {
     }
 };
 
-/**
- * 🔹 Trae las reservas de un día y consultorio específicos
- */
-export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales, showNotification) => {
+// ---------- traerReservas (CORREGIDO: nombre + apellido reales) ----------
+export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales) => {
     if (!fechaSeleccionada) return [];
 
     const year = fechaSeleccionada.getFullYear();
@@ -102,57 +100,50 @@ export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales
         const snapshot = await getDocs(q);
         if (snapshot.empty) return [];
 
-        const reservas = snapshot.docs.map((d) => {
-            const fechaStr = d.data().fecha;
-            return {
-                id: d.id,
-                ...d.data(),
-                fecha: fechaStr,
-                fechaObj: new Date(`${fechaStr}T00:00:00`)
-            };
-        });
+        const reservas = [];
+        const usuariosCache = {};
 
-        const userIds = [...new Set(reservas.map((r) => r.usuarioId).filter(Boolean))];
+        for (let d of snapshot.docs) {
+            const data = d.data();
 
-        let perfiles = {};
-        if (userIds.length > 0) {
-            const perfilDocs = await Promise.all(userIds.map((id) => getDoc(doc(db, "usuarios", id))));
-            perfilDocs.forEach((snap) => {
-                if (snap.exists()) {
-                    const data = snap.data();
-                    perfiles[snap.id] = {
-                        nombre: data.nombre || "",
-                        apellido: data.apellido || "",
-                    };
+            // ---- cargar perfil real del usuario ----
+            if (!usuariosCache[data.usuarioId]) {
+                const perfilSnap = await getDoc(doc(db, "usuarios", data.usuarioId));
+                if (perfilSnap.exists()) {
+                    usuariosCache[data.usuarioId] = perfilSnap.data();
+                } else {
+                    usuariosCache[data.usuarioId] = { nombre: "Desconocido", apellido: "" };
                 }
-            });
-        }
+            }
 
-        const reservasCompletas = reservas.map((r) => {
-            const perfil = perfiles[r.usuarioId] || { nombre: r.nombre || "Desconocido", apellido: r.apellido || "Usuario" };
-            return {
-                ...r,
+            const perfil = usuariosCache[data.usuarioId];
+
+            reservas.push({
+                id: d.id,
+                ...data,
                 nombre: perfil.nombre,
                 apellido: perfil.apellido,
                 iniciales: getIniciales(perfil.nombre, perfil.apellido),
-            };
-        });
+                fecha: data.fecha,
+                fechaObj: new Date(`${data.fecha}T00:00:00`),
+            });
+        }
 
-        // Ordenar por fecha + hora
-        reservasCompletas.sort((a, b) => new Date(`${a.fecha}T${a.horaInicio}`) - new Date(`${b.fecha}T${b.horaInicio}`));
+        reservas.sort(
+            (a, b) =>
+                new Date(`${a.fecha}T${a.horaInicio}`) -
+                new Date(`${b.fecha}T${b.horaInicio}`)
+        );
 
-        return reservasCompletas;
+        return reservas;
 
     } catch (error) {
         console.error("Error al traer reservas:", error);
-        showNotification?.("error", "Error al cargar reservas", "No se pudieron obtener las reservas del servidor.");
         return [];
     }
 };
 
-/**
- * 🔹 Confirma reservas y aplica descuento retroactivo por semana
- */
+// ---------- confirmarReserva ----------
 export const confirmarReserva = async ({
     reservaBase,
     tipoReserva,
@@ -167,11 +158,15 @@ export const confirmarReserva = async ({
         const { horaInicio, horaFin, consultorio } = reservaBase;
         const { precioBase, precioDescuento } = await getPreciosConfig();
 
+        // ---- PERFIL REAL ----
+        const userRef = await getDoc(doc(db, "usuarios", user.uid));
+        const perfil = userRef.exists() ? userRef.data() : { nombre: "", apellido: "" };
+
         const reservasUsuarioExistentes = await traerReservasUsuario(user.uid);
 
-        // 1️⃣ Preparar todas las reservas planeadas
         const reservasPlaneadas = [];
         const baseDate = new Date(`${reservaBase.fecha}T00:00:00`);
+
         let cantidad = 1;
         if (tipoReserva === "Recurrente") {
             cantidad = Math.max(1, recurrenciaCantidad);
@@ -186,7 +181,8 @@ export const confirmarReserva = async ({
 
             reservasPlaneadas.push({
                 usuarioId: user.uid,
-                nombre: user.displayName || "",
+                nombre: perfil.nombre,
+                apellido: perfil.apellido,
                 email: user.email,
                 fecha: fechaStr,
                 fechaObj: new Date(`${fechaStr}T00:00:00`),
@@ -198,36 +194,37 @@ export const confirmarReserva = async ({
             });
         }
 
-        // 2️⃣ Agrupar reservas (existentes + planeadas) por semana (lunes como clave)
+        // ---- Agrupar por semana ----
         const semanas = {};
-        [...reservasUsuarioExistentes, ...reservasPlaneadas].forEach(r => {
+        [...reservasUsuarioExistentes, ...reservasPlaneadas].forEach((r) => {
             const lunes = getMonday(r.fechaObj).toISOString().split("T")[0];
             if (!semanas[lunes]) semanas[lunes] = [];
             semanas[lunes].push(r);
         });
 
-        // 3️⃣ Aplicar precio correcto según total de reservas en cada semana
-        Object.values(semanas).forEach(reservasSemana => {
+        Object.values(semanas).forEach((reservasSemana) => {
             const aplicaDescuento = reservasSemana.length >= 10;
-            reservasSemana.forEach(r => {
+            reservasSemana.forEach((r) => {
                 r.precio = aplicaDescuento ? precioDescuento : precioBase;
             });
         });
 
-        // 4️⃣ Guardar reservas planeadas en Firestore con precio correcto
-        await Promise.all(reservasPlaneadas.map(r => {
-            const { fechaObj, ...rest } = r;
-            return addDoc(collection(db, "reservas"), rest);
-        }));
+        // ---- guardar ----
+        await Promise.all(
+            reservasPlaneadas.map((r) => {
+                const { fechaObj, ...rest } = r;
+                return addDoc(collection(db, "reservas"), rest);
+            })
+        );
 
-        // 5️⃣ Actualizar reservas existentes que necesitan descuento
+        // ---- actualizar existentes ----
         const updates = reservasUsuarioExistentes
-            .filter(r => r.precio !== precioBase)
-            .map(r => updateReservationPrice(r.id, r.precio));
+            .filter((r) => r.precio !== precioBase)
+            .map((r) => updateReservationPrice(r.id, r.precio));
+
         await Promise.all(updates);
 
         if (traerReservas) await traerReservas();
-
     } catch (error) {
         console.error("Error al confirmar reserva:", error);
     }

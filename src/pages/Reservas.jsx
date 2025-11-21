@@ -10,7 +10,7 @@ import { generarHorarios } from "../utils/horariosUtils";
 import { getIniciales } from "../utils/userUtils";
 import { traerReservas, traerReservasUsuario } from "../utils/reservasUtils";
 
-import Calendar from "../components/Calendar"; // ⭐ NUESTRO NUEVO CALENDARIO
+import Calendar from "../components/Calendar";
 import NotificationModal from "../components/NotificationModal";
 import ConfirmarReservaModal from "../components/ConfirmarReservaModal";
 import CancelarReservaModal from "../components/CancelarReservaModal";
@@ -418,7 +418,12 @@ const Reservas = () => {
                 <CancelarReservaModal
                     reserva={reservaACancelar}
                     onClose={() => setIsModalOpen(false)}
-                    onCancelSuccess={cargarReservas}
+                    onCancelSuccess={async () => {
+                        await cargarReservas();
+                        const nuevas = await traerReservasUsuario(user.uid);
+                        const ordenadas = ordenarReservas(nuevas);
+                        setMisReservas(ordenadas);
+                    }}
                     showNotification={showNotification}
                 />
             )}

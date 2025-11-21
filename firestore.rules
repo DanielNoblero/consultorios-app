@@ -2,12 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPERS GENERALES ---
     function isLoggedIn() {
       return request.auth != null;
     }
 
-    // Usamos el *custom claim* "rol" del token de Firebase Auth
     function isAdmin() {
       return isLoggedIn() && request.auth.token.rol == "admin";
     }
@@ -15,55 +13,43 @@ service cloud.firestore {
     // ---------------- USUARIOS ----------------
     match /usuarios/{uid} {
 
-      // Crear su propio documento (primer login)
       allow create: if isLoggedIn() && request.auth.uid == uid;
 
-      // Leer su propio perfil o cualquier perfil si es admin
       allow read: if isLoggedIn() &&
                   (request.auth.uid == uid || isAdmin());
 
-      // Actualizar su perfil (no puede tocar "rol")
-      // Admin puede actualizar cualquier usuario (incluyendo rol)
       allow update: if
         (
           isLoggedIn() &&
           request.auth.uid == uid &&
-          !("rol" in request.resource.data)
+          !( "rol" in request.resource.data.diff(resource.data).changedKeys() )
         )
         || isAdmin();
 
-      // Nunca se puede borrar un usuario desde el cliente
       allow delete: if false;
     }
 
-    // ---------------- CONFIGURACIÓN ----------------
-    // Aquí está tu documento configuracion/precioConsulta
+    // ---------------- CONFIGURACION ----------------
     match /configuracion/{docId} {
-
-      // Cualquier usuario logueado puede leer precios/config
       allow read: if isLoggedIn();
-
-      // Solo admin puede modificar configuración
       allow write: if isAdmin();
     }
 
     // ---------------- RESERVAS ----------------
     match /reservas/{reservaId} {
 
-      // Crear reserva: el campo usuarioId debe coincidir con el uid
-      allow create: if isLoggedIn()
-                    && request.resource.data.usuarioId == request.auth.uid;
+  // Crear solo su propia reserva
+  allow create: if isLoggedIn()
+                && request.resource.data.usuarioId == request.auth.uid;
 
-      // Leer: dueño de la reserva o admin
-      allow read: if isLoggedIn() &&
-                  (request.auth.uid == resource.data.usuarioId || isAdmin());
+  // Leer: cualquier usuario autenticado puede ver reservas
+  allow read: if isLoggedIn();
 
-      // Actualizar / eliminar: dueño o admin
-      allow update, delete: if isLoggedIn() &&
-                  (request.auth.uid == resource.data.usuarioId || isAdmin());
-    }
+  // Actualizar / eliminar: dueño o admin
+  allow update, delete: if isLoggedIn() &&
+              (request.auth.uid == resource.data.usuarioId || isAdmin());
+}
 
-    // ---------------- ADMIN (colección opcional) ----------------
     match /admin/{docId} {
       allow read, write: if isAdmin();
     }

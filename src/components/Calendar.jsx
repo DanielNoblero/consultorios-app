@@ -15,7 +15,8 @@ export default function Calendar({
         const year = date.getFullYear();
         const month = date.getMonth();
 
-        const firstDay = new Date(year, month, 1).getDay();
+        let firstDay = new Date(year, month, 1).getDay();
+        firstDay = (firstDay === 0 ? 6 : firstDay - 1);
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         const weeks = [];
@@ -113,10 +114,9 @@ export default function Calendar({
                             ${disabled ? "opacity-40 cursor-not-allowed" : ""}
                             ${isToday(day) ? "ring-2 ring-blue-400" : ""}
                             ${isSelected ? "bg-blue-600 text-white ring-2 ring-blue-800" : ""}
-                            ${
-                                tieneReservas && isCurrentMonth
-                                    ? "bg-red-400 text-white"
-                                    : "bg-green-200 text-gray-800"
+                            ${tieneReservas && isCurrentMonth
+                                ? "bg-red-400 text-white"
+                                : "bg-green-200 text-gray-800"
                             }
                         `;
 

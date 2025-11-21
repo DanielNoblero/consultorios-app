@@ -58,7 +58,7 @@ const Login = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        className="border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
                         disabled={loading}
                     />
                     <input
@@ -67,14 +67,14 @@ const Login = () => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
-                        className="border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-400"
                         disabled={loading}
                     />
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className={`bg-blue-700 text-white py-2 rounded-lg transition ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-800'}`}
+                        className={`bg-blue-700 text-white py-3 rounded-lg font-semibold transition ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-800'}`}
                     >
                         {loading ? "Entrando..." : "Entrar"}
                     </button>
@@ -88,7 +88,7 @@ const Login = () => {
                         type="button"
                         onClick={handleGoogleSignIn}
                         disabled={loading}
-                        className={`w-full mt-4 flex items-center justify-center border py-2 rounded-lg transition ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                        className={`w-full flex items-center justify-center border py-3 rounded-lg transition font-medium text-gray-700 ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
                     >
                         <img
                             src="https://www.svgrepo.com/show/475656/google-color.svg"
@@ -99,7 +99,7 @@ const Login = () => {
                     </button>
                 </form>
 
-                <p className="text-center text-sm mt-4 text-gray-600">
+                <p className="text-center text-sm mt-6 text-gray-600">
                     ¿No tienes cuenta?{" "}
                     <Link to="/register" className="text-blue-600 font-medium hover:underline">
                         Regístrate

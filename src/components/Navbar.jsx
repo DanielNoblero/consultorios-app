@@ -81,7 +81,7 @@ export default function Navbar() {
                         <img
                             src={Logo}
                             alt="Logo"
-                            className="w-9 h-9 object-contain drop-shadow-md"
+                            className="w-9 h-20 object-contain drop-shadow-md"
                         />
                         <span className="text-sky-800 font-extrabold text-xl tracking-wide">
                             Analyse
@@ -142,7 +142,7 @@ export default function Navbar() {
 
                     {/* --- MOBILE HAMBURGER --- */}
                     <button
-                        className="md:hidden text-blue-700 hover:text-gray-200"
+                        className="md:hidden text-sky-800 hover:text-gray-200"
                         onClick={() => setIsOpen(!isOpen)}
                     >
                         {isOpen ? (

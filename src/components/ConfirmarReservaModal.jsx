@@ -1,5 +1,11 @@
-import React from "react";
+// src/components/ConfirmarReservaModal.jsx
+import React, { useState } from "react";
 import { confirmarReserva } from "../utils/reservasUtils";
+import {
+    CalendarDays,
+    Clock,
+    Building2
+} from "lucide-react";
 
 const ConfirmarReservaModal = ({
     reservaAConfirmar,
@@ -13,123 +19,146 @@ const ConfirmarReservaModal = ({
     user,
     showNotification,
     cargarReservas,
-    actualizarMisReservas, // 🔁 Nuevo parámetro opcional
+    actualizarMisReservas
 }) => {
+
+    const [loading, setLoading] = useState(false);
+
     if (!reservaAConfirmar) return null;
 
     const handleConfirmar = async () => {
-        await confirmarReserva({
-            reservaBase: reservaAConfirmar,
-            tipoReserva,
-            recurrenciaTipo,
-            recurrenciaCantidad,
-            user,
-            showNotification,
-            traerReservas: cargarReservas,
-        });
+        try {
+            setLoading(true);
 
-        // 🔁 Si se pasa la función, refresca la lista de “Mis Reservas”
-        if (actualizarMisReservas) await actualizarMisReservas();
+            await confirmarReserva({
+                reservaBase: reservaAConfirmar,
+                tipoReserva,
+                recurrenciaTipo,
+                recurrenciaCantidad,
+                user,
+                traerReservas: cargarReservas,
+            });
 
-        setIsReservaModalOpen(false);
+            await actualizarMisReservas?.();
+
+            showNotification(
+                "success",
+                "Reserva Confirmada",
+                tipoReserva === "Ocasional"
+                    ? "Tu reserva ha sido registrada."
+                    : "Tus reservas recurrentes han sido creadas correctamente."
+            );
+
+            setIsReservaModalOpen(false);
+
+        } catch (error) {
+            console.error("Error confirmando reserva:", error);
+            showNotification(
+                "error",
+                "Error",
+                "Ocurrió un problema al confirmar la reserva."
+            );
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-                {/* Header */}
-                <div className="bg-blue-600 p-4 rounded-t-xl">
-                    <h3 className="text-xl font-bold text-white">✅ Confirmar Reserva</h3>
-                </div>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
 
-                {/* Contenido */}
-                <div className="p-6 text-gray-700">
-                    <p className="mb-4">
-                        Vas a confirmar la reserva del{" "}
-                        <strong>{reservaAConfirmar.fecha}</strong> en el{" "}
-                        <strong>Consultorio {reservaAConfirmar.consultorio}</strong> de{" "}
-                        {reservaAConfirmar.horaInicio} a {reservaAConfirmar.horaFin}.
-                    </p>
+            <div className="bg-white w-full max-w-md p-6 rounded-2xl shadow-2xl border border-gray-200 animate-slideUp">
 
-                    {/* Tipo de reserva */}
-                    <div className="mb-4">
-                        <label className="block mb-2 font-bold">Tipo de Reserva:</label>
-                        <div className="flex space-x-4">
-                            <button
-                                onClick={() => setTipoReserva("Ocasional")}
-                                className={`px-4 py-2 rounded-lg transition ${tipoReserva === "Ocasional"
-                                        ? "bg-blue-600 text-white"
-                                        : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                    }`}
-                            >
-                                Ocasional
-                            </button>
-                            <button
-                                onClick={() => setTipoReserva("Recurrente")}
-                                className={`px-4 py-2 rounded-lg transition ${tipoReserva === "Recurrente"
-                                        ? "bg-blue-600 text-white"
-                                        : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                    }`}
-                            >
-                                Recurrente
-                            </button>
-                        </div>
+                {/* HEADER */}
+                <h2 className="text-2xl font-extrabold text-blue-800 text-center mb-6 tracking-wide">
+                    Confirmar Reserva
+                </h2>
+
+                {/* INFO BOX */}
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 mb-6 space-y-2">
+                    <div className="flex items-center gap-2 text-gray-700">
+                        <CalendarDays size={20} className="text-blue-600" />
+                        <span><strong>Fecha:</strong> {reservaAConfirmar.fecha}</span>
                     </div>
 
-                    {/* Configuración de recurrencia */}
-                    {tipoReserva === "Recurrente" && (
-                        <div className="border rounded-lg p-4 bg-gray-50">
-                            <label className="block mb-2 font-bold">Frecuencia:</label>
-                            <div className="flex space-x-2 mb-4">
-                                {["Semanal", "Mensual", "Anual"].map((t) => (
-                                    <button
-                                        key={t}
-                                        onClick={() => {
-                                            setRecurrenciaTipo(t);
-                                            setRecurrenciaCantidad(1);
-                                        }}
-                                        className={`flex-1 px-3 py-1 rounded-lg transition ${recurrenciaTipo === t
-                                                ? "bg-green-600 text-white"
-                                                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                            }`}
-                                    >
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
+                    <div className="flex items-center gap-2 text-gray-700">
+                        <Clock size={20} className="text-blue-600" />
+                        <span><strong>Horario:</strong> {reservaAConfirmar.horaInicio} - {reservaAConfirmar.horaFin}</span>
+                    </div>
 
-                            <label className="block mb-1 font-semibold">
-                                Número de repeticiones:
-                            </label>
+                    <div className="flex items-center gap-2 text-gray-700">
+                        <Building2 size={20} className="text-blue-600" />
+                        <span><strong>Consultorio:</strong> {reservaAConfirmar.consultorio}</span>
+                    </div>
+                </div>
+
+                {/* SELECT TIPO */}
+                <label className="font-semibold text-gray-700">Tipo de reserva</label>
+                <select
+                    value={tipoReserva}
+                    onChange={(e) => setTipoReserva(e.target.value)}
+                    className="w-full mt-1 p-3 border rounded-lg bg-gray-100 focus:ring-2 focus:ring-blue-400"
+                >
+                    <option value="Ocasional">Ocasional (1 reserva)</option>
+                    <option value="Recurrente">Recurrente</option>
+                </select>
+
+                {/* RECURRENCIA */}
+                {tipoReserva === "Recurrente" && (
+                    <>
+                        <div className="mt-5">
+                            <label className="font-semibold text-gray-700">Frecuencia</label>
+                            <select
+                                value={recurrenciaTipo}
+                                onChange={(e) => setRecurrenciaTipo(e.target.value)}
+                                className="w-full mt-1 p-3 border rounded-lg bg-gray-100 focus:ring-2 focus:ring-blue-400"
+                            >
+                                <option value="Semanal">Semanal</option>
+                                <option value="Mensual">Mensual</option>
+                                <option value="Anual">Anual</option>
+                            </select>
+                        </div>
+
+                        <div className="mt-4">
+                            <label className="font-semibold text-gray-700">Cantidad</label>
                             <input
                                 type="number"
                                 min="1"
                                 value={recurrenciaCantidad}
-                                onChange={(e) =>
-                                    setRecurrenciaCantidad(Math.max(1, parseInt(e.target.value) || 1))
-                                }
-                                className="border border-gray-300 rounded-lg p-2 w-full text-center"
+                                onChange={(e) => setRecurrenciaCantidad(Number(e.target.value))}
+                                className="w-full mt-1 p-3 border rounded-lg bg-gray-100 focus:ring-2 focus:ring-blue-400"
                             />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Semanal = ×1 · Mensual = ×4 · Anual = ×52
+                            </p>
                         </div>
-                    )}
-                </div>
+                    </>
+                )}
 
-                {/* Botones */}
-                <div className="flex justify-end p-4 bg-gray-50 space-x-3 rounded-b-xl">
+                {/* BOTONES */}
+                <div className="flex justify-between mt-8">
+
                     <button
                         onClick={() => setIsReservaModalOpen(false)}
-                        className="px-4 py-2 bg-white border rounded-lg hover:bg-gray-100 transition"
+                        className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 
+                                   text-gray-700 font-semibold transition"
+                        disabled={loading}
                     >
                         Cancelar
                     </button>
+
                     <button
                         onClick={handleConfirmar}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        disabled={loading}
+                        className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 
+                                   text-white font-bold shadow-md transition"
                     >
-                        Confirmar
+                        {loading ? "Confirmando..." : "Confirmar"}
                     </button>
+
                 </div>
+
             </div>
+
         </div>
     );
 };
