@@ -22,6 +22,8 @@ import {
 
 const CONFIG_DOC_ID = "precioConsulta";
 
+const esMobile = window.innerWidth < 768;
+
 const Admin = () => {
     const [usuarios, setUsuarios] = useState([]);
     const [reservas, setReservas] = useState([]);
@@ -103,7 +105,7 @@ const Admin = () => {
      */
     const esReservaDelMesActual = (fechaStr) => {
         // Usamos una hora al final para una construcción de Date más robusta, aunque solo compare mes/año
-        const fecha = new Date(`${fechaStr}T12:00:00`); 
+        const fecha = new Date(`${fechaStr}T12:00:00`);
         const now = new Date();
         return (
             fecha.getMonth() === now.getMonth() &&
@@ -253,15 +255,15 @@ const Admin = () => {
                             ${totalDineroMes.toFixed(2)}
                         </p>
                     </div>
-                    
+
                 </div>
 
                 <p className="text-sm text-gray-500 mt-4">* Cálculo automático en tiempo real.</p>
                 <button onClick={generarReporte} className="text-white px-6 py-3 rounded-lg transition font-bold shadow-md md:ml-4 bg-green-600 hover:bg-green-700 flex items-center justify-center mt-4">
-                        Generar Reporte Mensual
-                    </button>
+                    Generar Reporte Mensual
+                </button>
             </div>
-            
+
             {/* --- SECCIÓN: CONFIGURACIÓN GENERAL --- */}
             <div className="mb-8 p-6 bg-white rounded-xl shadow-2xl border border-blue-100">
                 <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
@@ -322,62 +324,123 @@ const Admin = () => {
                 <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
                     <Users className="h-6 w-6 mr-2 text-red-600" /> Gestión de Profesionales y Finanzas
                 </h2>
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[700px] border-collapse rounded-xl overflow-hidden shadow-lg">
-                        <thead className="bg-red-600 text-white text-left text-sm uppercase tracking-wider">
-                            <tr>
-                                <th className="px-4 py-3">Nombre</th>
-                                <th className="px-4 py-3">Email / Teléfono</th>
-                                <th className="px-4 py-3 text-center">Deuda Total ($)</th>
-                                <th className="px-4 py-3 text-center">Rol (Cambiar)</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {usuariosOrdenados.map(u => {
-                                const deuda = parseFloat(calcularDeudaDelMes(u.id));
-                                const tieneDeuda = deuda > 0;
-                                const rowClass = tieneDeuda
-                                    ? "bg-red-50 hover:bg-red-100"
-                                    : "even:bg-gray-50 hover:bg-gray-100";
-                                const rolColor =
-                                    u.rol === "admin"
-                                        ? "text-yellow-600 font-extrabold"
-                                        : u.rol === "psicologo"
-                                            ? "text-blue-600 font-semibold"
-                                            : "text-gray-500";
 
-                                return (
-                                    <tr key={u.id} className={rowClass}>
-                                        <td className="px-4 py-3 font-medium text-gray-900">{u.nombre || "N/A"}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                            {u.email}
-                                            <span className="block text-xs text-gray-500">{u.telefono}</span>
-                                        </td>
-                                        <td
-                                            className={`px-4 py-3 text-center text-lg ${tieneDeuda
-                                                ? "text-red-700 font-extrabold"
-                                                : "text-green-600 font-bold"
+                {/* 🔥 NUEVO: Versión MOBILE en TARJETAS */}
+                {esMobile ? (
+                    <div className="space-y-4">
+                        {usuariosOrdenados.map(u => {
+                            const deuda = parseFloat(calcularDeudaDelMes(u.id));
+                            const tieneDeuda = deuda > 0;
+
+                            return (
+                                <div
+                                    key={u.id}
+                                    className={`p-4 rounded-xl shadow-md border ${tieneDeuda ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
+                                        }`}
+                                >
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="text-lg font-bold text-gray-900">{u.nombre}</h3>
+                                        <span
+                                            className={`px-2 py-1 rounded-md text-xs font-semibold ${u.rol === "admin"
+                                                ? "bg-yellow-100 text-yellow-700"
+                                                : u.rol === "psicologo"
+                                                    ? "bg-blue-100 text-blue-700"
+                                                    : "bg-gray-200 text-gray-700"
                                                 }`}
                                         >
-                                            ${deuda.toFixed(2)}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <select
-                                                value={u.rol || "usuario"}
-                                                onChange={e => handleCambiarRol(u.id, e.target.value)}
-                                                className={`border-2 border-gray-300 rounded-lg p-2 w-full max-w-[150px] bg-white text-sm shadow-inner ${rolColor}`}
+                                            {u.rol}
+                                        </span>
+                                    </div>
+
+                                    <p className="text-sm text-gray-700">
+                                        📧 {u.email}
+                                        <br />
+                                        📱 {u.telefono}
+                                    </p>
+
+                                    <p
+                                        className={`mt-3 font-bold ${tieneDeuda ? "text-red-700" : "text-green-700"
+                                            }`}
+                                    >
+                                        Deuda del mes: ${deuda.toFixed(2)}
+                                    </p>
+
+                                    {/* Rol selector */}
+                                    <div className="mt-3">
+                                        <label className="text-gray-600 text-sm mb-1 block">Cambiar rol:</label>
+                                        <select
+                                            value={u.rol || "usuario"}
+                                            onChange={(e) => handleCambiarRol(u.id, e.target.value)}
+                                            className="w-full p-2 rounded-md border bg-white shadow-sm text-sm"
+                                        >
+                                            <option value="psicologo">Psicólogo</option>
+                                            <option value="admin">Admin</option>
+                                            <option value="usuario">Usuario</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    // 🔥 VERSIÓN DESKTOP (tu tabla original)
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[700px] border-collapse rounded-xl overflow-hidden shadow-lg">
+                            <thead className="bg-red-600 text-white text-left text-sm uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-4 py-3">Nombre</th>
+                                    <th className="px-4 py-3">Email / Teléfono</th>
+                                    <th className="px-4 py-3 text-center">Deuda Total ($)</th>
+                                    <th className="px-4 py-3 text-center">Rol (Cambiar)</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {usuariosOrdenados.map(u => {
+                                    const deuda = parseFloat(calcularDeudaDelMes(u.id));
+                                    const tieneDeuda = deuda > 0;
+                                    const rowClass = tieneDeuda
+                                        ? "bg-red-50 hover:bg-red-100"
+                                        : "even:bg-gray-50 hover:bg-gray-100";
+                                    const rolColor =
+                                        u.rol === "admin"
+                                            ? "text-yellow-600 font-extrabold"
+                                            : u.rol === "psicologo"
+                                                ? "text-blue-600 font-semibold"
+                                                : "text-gray-500";
+
+                                    return (
+                                        <tr key={u.id} className={rowClass}>
+                                            <td className="px-4 py-3 font-medium text-gray-900">{u.nombre || "N/A"}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-600">
+                                                {u.email}
+                                                <span className="block text-xs text-gray-500">{u.telefono}</span>
+                                            </td>
+                                            <td
+                                                className={`px-4 py-3 text-center text-lg ${tieneDeuda
+                                                    ? "text-red-700 font-extrabold"
+                                                    : "text-green-600 font-bold"
+                                                    }`}
                                             >
-                                                <option value="psicologo">Psicólogo</option>
-                                                <option value="admin">Admin</option>
-                                                <option value="usuario">Usuario</option>
-                                            </select>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                                ${deuda.toFixed(2)}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <select
+                                                    value={u.rol || "usuario"}
+                                                    onChange={(e) => handleCambiarRol(u.id, e.target.value)}
+                                                    className={`border-2 border-gray-300 rounded-lg p-2 w-full max-w-[150px] bg-white text-sm shadow-inner ${rolColor}`}
+                                                >
+                                                    <option value="psicologo">Psicólogo</option>
+                                                    <option value="admin">Admin</option>
+                                                    <option value="usuario">Usuario</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
 
             {/* --- SECCIÓN: DETALLE DE RESERVAS --- */}
@@ -390,7 +453,7 @@ const Admin = () => {
                         let reservasUsuario = reservas
                             .filter(r => r.usuarioId === usuario.id || r.userId === usuario.id)
                             .filter(r => esReservaDelMesActual(r.fecha));
-                        
+
                         // ✅ Lógica de ordenamiento: Por fecha (ascendente) y luego por hora de inicio (ascendente)
                         reservasUsuario.sort((a, b) => {
                             const dateA = new Date(`${a.fecha}T${a.horaInicio}`);
@@ -403,7 +466,7 @@ const Admin = () => {
                                 }
                                 return a.horaInicio.localeCompare(b.horaInicio);
                             }
-                            
+
                             return dateA.getTime() - dateB.getTime();
                         });
 
@@ -452,16 +515,16 @@ const Admin = () => {
                                 </button>
 
                                 {isOpen && (
-                                    <div className="p-4 bg-gray-50 border-t border-gray-200">
+                                    <div className="p-1 bg-gray-50 border-t border-gray-200">
                                         <div className="overflow-x-auto">
-                                            <table className="w-full min-w-[600px] text-xs sm:text-sm border-collapse">
+                                            <table className="w-full min-w-[480px] text-[12px] sm:text-xs border-collapse">
                                                 <thead className="bg-gray-200 text-gray-700 uppercase">
                                                     <tr>
-                                                        <th className="px-3 py-2 text-left">Consultorio</th>
-                                                        <th className="px-3 py-2">Fecha/Hora</th>
-                                                        <th className="px-3 py-2">Precio ($)</th>
-                                                        <th className="px-3 py-2">Estado</th>
-                                                        <th className="px-3 py-2">Acciones</th>
+                                                        <th className="px-0.5 py-0.5 text-left">Consultorio</th>
+                                                        <th className="px-0.5 py-0.5">Fecha/Hora</th>
+                                                        <th className="px-0.5 py-0.5">Precio ($)</th>
+                                                        <th className="px-0.5 py-0.5">Estado</th>
+                                                        <th className="px-0.5 py-0.5">Acciones</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
@@ -471,19 +534,19 @@ const Admin = () => {
                                                             className={`text-center ${r.pagado ? "bg-white" : "bg-yellow-50"
                                                                 } hover:bg-gray-100`}
                                                         >
-                                                            <td className="px-3 py-2 text-left font-medium">
+                                                            <td className="px-1 py-2  text-left font-medium">
                                                                 {r.consultorio}
                                                             </td>
-                                                            <td className="px-3 py-2">
+                                                            <td className="px-1 py-2 ">
                                                                 {r.fecha} - {r.horaInicio} a {r.horaFin}
                                                             </td>
                                                             <td
-                                                                className={`px-3 py-2 font-semibold ${r.pagado ? "text-gray-600" : "text-red-500"
+                                                                className={`px-1 py-2 font-semibold ${r.pagado ? "text-gray-600" : "text-red-500"
                                                                     }`}
                                                             >
                                                                 ${r.precio}
                                                             </td>
-                                                            <td className="px-3 py-2 text-sm font-semibold">
+                                                            <td className="px-1 py-2  text-sm font-semibold">
                                                                 {r.pagado ? (
                                                                     <span className="text-green-600 flex items-center justify-center">
                                                                         <CheckCircle className="h-4 w-4 mr-1" /> Pagado
