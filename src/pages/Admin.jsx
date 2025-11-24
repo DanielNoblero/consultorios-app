@@ -22,17 +22,22 @@ import {
 
 const CONFIG_DOC_ID = "precioConsulta";
 
-const esMobile = window.innerWidth < 768;
-
 const Admin = () => {
     const [usuarios, setUsuarios] = useState([]);
     const [reservas, setReservas] = useState([]);
     const [precioConsulta, setPrecioConsulta] = useState(250);
     const [precioDescuento, setPrecioDescuento] = useState(230); // ✅ Nuevo campo
     const [acordeonesAbiertos, setAcordeonesAbiertos] = useState({});
+    const [expandAll, setExpandAll] = useState(false);
     const [isSavingPrice, setIsSavingPrice] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
 
+    useEffect(() => {
+        const handleResize = () => setEsMobile(window.innerWidth < 768);
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
     //Resunmen del mes actual plata
     const [totalConsultasMes, setTotalConsultasMes] = useState(0);
     const [totalDineroMes, setTotalDineroMes] = useState(0);
@@ -321,11 +326,29 @@ const Admin = () => {
 
             {/* --- SECCIÓN: USUARIOS Y DEUDA --- */}
             <div className="mb-10 p-6 bg-white rounded-xl shadow-2xl border border-red-100">
-                <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
-                    <Users className="h-6 w-6 mr-2 text-red-600" /> Gestión de Profesionales y Finanzas
+
+                <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center justify-between">
+                    <span className="flex items-center">
+                        <Users className="h-6 w-6 mr-2 text-red-600" />
+                        Gestión de Profesionales y Finanzas
+                    </span>
+
+                    {/* ⭐ BOTÓN GLOBAL EXPANDIR/CONTRAER (SOLO MOBILE) */}
+                    {esMobile && (
+                        <button
+                            onClick={() => setExpandAll(!expandAll)}
+                            className="p-2 rounded-full bg-red-100 hover:bg-red-200 transition"
+                        >
+                            {expandAll ? (
+                                <ChevronUp className="h-6 w-6 text-red-600" />
+                            ) : (
+                                <ChevronDown className="h-6 w-6 text-red-600" />
+                            )}
+                        </button>
+                    )}
                 </h2>
 
-                {/* 🔥 NUEVO: Versión MOBILE en TARJETAS */}
+                {/* VERSION MOBILE */}
                 {esMobile ? (
                     <div className="space-y-4">
                         {usuariosOrdenados.map(u => {
@@ -342,42 +365,48 @@ const Admin = () => {
                                         <h3 className="text-lg font-bold text-gray-900">{u.nombre}</h3>
                                         <span
                                             className={`px-2 py-1 rounded-md text-xs font-semibold ${u.rol === "admin"
-                                                ? "bg-yellow-100 text-yellow-700"
-                                                : u.rol === "psicologo"
-                                                    ? "bg-blue-100 text-blue-700"
-                                                    : "bg-gray-200 text-gray-700"
+                                                    ? "bg-yellow-100 text-yellow-700"
+                                                    : u.rol === "psicologo"
+                                                        ? "bg-blue-100 text-blue-700"
+                                                        : "bg-gray-200 text-gray-700"
                                                 }`}
                                         >
                                             {u.rol}
                                         </span>
                                     </div>
 
-                                    <p className="text-sm text-gray-700">
-                                        📧 {u.email}
-                                        <br />
-                                        📱 {u.telefono}
-                                    </p>
+                                    {/* ⭐ CONTENIDO EXPANDIBLE */}
+                                    {expandAll && (
+                                        <>
+                                            <p className="text-sm text-gray-700">
+                                                📧 {u.email}
+                                                <br />
+                                                📱 {u.telefono}
+                                            </p>
 
-                                    <p
-                                        className={`mt-3 font-bold ${tieneDeuda ? "text-red-700" : "text-green-700"
-                                            }`}
-                                    >
-                                        Deuda del mes: ${deuda.toFixed(2)}
-                                    </p>
+                                            <p
+                                                className={`mt-3 font-bold ${tieneDeuda ? "text-red-700" : "text-green-700"
+                                                    }`}
+                                            >
+                                                Deuda del mes: ${deuda.toFixed(2)}
+                                            </p>
 
-                                    {/* Rol selector */}
-                                    <div className="mt-3">
-                                        <label className="text-gray-600 text-sm mb-1 block">Cambiar rol:</label>
-                                        <select
-                                            value={u.rol || "usuario"}
-                                            onChange={(e) => handleCambiarRol(u.id, e.target.value)}
-                                            className="w-full p-2 rounded-md border bg-white shadow-sm text-sm"
-                                        >
-                                            <option value="psicologo">Psicólogo</option>
-                                            <option value="admin">Admin</option>
-                                            <option value="usuario">Usuario</option>
-                                        </select>
-                                    </div>
+                                            <div className="mt-3">
+                                                <label className="text-gray-600 text-sm mb-1 block">
+                                                    Cambiar rol:
+                                                </label>
+                                                <select
+                                                    value={u.rol || "usuario"}
+                                                    onChange={(e) => handleCambiarRol(u.id, e.target.value)}
+                                                    className="w-full p-2 rounded-md border bg-white shadow-sm text-sm"
+                                                >
+                                                    <option value="psicologo">Psicólogo</option>
+                                                    <option value="admin">Admin</option>
+                                                    <option value="usuario">Usuario</option>
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             );
                         })}
