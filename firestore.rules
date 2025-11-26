@@ -6,50 +6,55 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isLoggedIn() && request.auth.token.rol == "admin";
+    // 🔥 NECESARIA PARA CREAR USUARIOS
+    function isOwner(uid) {
+      return isLoggedIn() && request.auth.uid == uid;
     }
 
-    // ---------------- USUARIOS ----------------
+    function isAdmin() {
+      return isLoggedIn() &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == "admin";
+    }
+
+    // --------------- USUARIOS ----------------
     match /usuarios/{uid} {
 
-      allow create: if isLoggedIn() && request.auth.uid == uid;
+      // 🔥 Crear solo su propio documento
+      allow create: if isOwner(uid);
 
-      allow read: if isLoggedIn() &&
-                  (request.auth.uid == uid || isAdmin());
+      // Leer: dueños o admins
+      allow read: if isOwner(uid) || isAdmin();
 
+      // Actualizar: dueño (sin rol) o admin
       allow update: if
         (
-          isLoggedIn() &&
-          request.auth.uid == uid &&
-          !( "rol" in request.resource.data.diff(resource.data).changedKeys() )
+          isOwner(uid) &&
+          !("rol" in request.resource.data.diff(resource.data).changedKeys())
         )
         || isAdmin();
 
       allow delete: if false;
     }
 
-    // ---------------- CONFIGURACION ----------------
+    // --------------- CONFIG ----------------
     match /configuracion/{docId} {
       allow read: if isLoggedIn();
       allow write: if isAdmin();
     }
 
-    // ---------------- RESERVAS ----------------
+    // --------------- RESERVAS ----------------
     match /reservas/{reservaId} {
 
-  // Crear solo su propia reserva
-  allow create: if isLoggedIn()
-                && request.resource.data.usuarioId == request.auth.uid;
+      allow create: if isLoggedIn() &&
+                    request.resource.data.psicologoId == request.auth.uid;
 
-  // Leer: cualquier usuario autenticado puede ver reservas
-  allow read: if isLoggedIn();
+      allow read: if isLoggedIn();
 
-  // Actualizar / eliminar: dueño o admin
-  allow update, delete: if isLoggedIn() &&
-              (request.auth.uid == resource.data.usuarioId || isAdmin());
-}
+      allow update, delete: if isLoggedIn() &&
+               (request.auth.uid == resource.data.psicologoId || isAdmin());
+    }
 
+    // --------------- ADMIN PANEL ----------------
     match /admin/{docId} {
       allow read, write: if isAdmin();
     }

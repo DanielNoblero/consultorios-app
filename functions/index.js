@@ -158,39 +158,37 @@ exports.generarReporteManual = onRequest(
             return res.status(500).send("Error generando reporte");
         }
     }
-);p
+); 
 
 /* =============================================================
    2) ASIGNAR ROL ADMIN (Custom Claims)
 ============================================================= */
-exports.asignarRolAdmin = onCall((request) => {
+exports.asignarRolAdmin = onCall(async (request) => {
     try {
-        if (!request.auth?.token?.admin) throw new Error("No autorizado");
+        // 🔐 Validación correcta para múltiples admins
+        if (request.auth?.token?.rol !== "admin") {
+            throw new Error("No autorizado: solo administradores pueden asignar roles.");
+        }
 
         const email = request.data.email;
         const rol = request.data.rol || "admin";
 
         if (!email) throw new Error("Email requerido");
 
-        return admin
-            .auth()
-            .getUserByEmail(email)
-            .then((userRecord) =>
-                admin.auth().setCustomUserClaims(userRecord.uid, {
-                    rol,
-                    admin: rol === "admin",
-                })
-            )
-            .then(() => ({
-                ok: true,
-                message: `Rol '${rol}' asignado a ${email}`,
-            }))
-            .catch((error) => {
-                logger.error("Error asignando rol:", error);
-                throw new Error("No se pudo asignar el rol");
-            });
+        const userRecord = await admin.auth().getUserByEmail(email);
+
+        await admin.auth().setCustomUserClaims(userRecord.uid, {
+            rol,
+            admin: rol === "admin",
+        });
+
+        return {
+            ok: true,
+            message: `Rol '${rol}' asignado a ${email}`,
+        };
+
     } catch (error) {
-        logger.error("Error:", error);
+        logger.error("Error asignando rol:", error);
         throw new Error(error.message || "Error interno");
     }
 });

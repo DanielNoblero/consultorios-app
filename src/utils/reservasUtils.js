@@ -1,3 +1,9 @@
+// =============================================
+// utils/reservasUtils.js
+// SISTEMA COMPLETO, ACTUALIZADO Y CORREGIDO
+// SOLO USA psicologoId
+// =============================================
+
 import { db } from "../firebaseConfig";
 import {
     collection,
@@ -10,7 +16,9 @@ import {
     updateDoc,
 } from "firebase/firestore";
 
-// ---------- getPreciosConfig ---------
+// =====================================================
+// PRECIOS CONFIGURADOS
+// =====================================================
 export const getPreciosConfig = async () => {
     try {
         const ref = doc(db, "configuracion", "precioConsulta");
@@ -28,7 +36,9 @@ export const getPreciosConfig = async () => {
     return { precioBase: 250, precioDescuento: 230 };
 };
 
-// ---------- getMonday ----------
+// =====================================================
+// UTILIDADES DE FECHAS
+// =====================================================
 export const getMonday = (date) => {
     const d = new Date(date);
     const day = d.getDay();
@@ -38,7 +48,6 @@ export const getMonday = (date) => {
     return monday;
 };
 
-// ---------- getSunday ----------
 export const getSunday = (date) => {
     const lunes = getMonday(date);
     const domingo = new Date(lunes);
@@ -47,12 +56,18 @@ export const getSunday = (date) => {
     return domingo;
 };
 
-// ---------- traerReservasUsuario ----------
+// =====================================================
+//  TRAER RESERVAS DEL PROFESIONAL (psicologoId)
+// =====================================================
 export const traerReservasUsuario = async (userId) => {
     if (!userId) return [];
 
     try {
-        const q = query(collection(db, "reservas"), where("usuarioId", "==", userId));
+        const q = query(
+            collection(db, "reservas"),
+            where("psicologoId", "==", userId)
+        );
+
         const snapshot = await getDocs(q);
 
         return snapshot.docs.map((d) => {
@@ -70,61 +85,64 @@ export const traerReservasUsuario = async (userId) => {
     }
 };
 
-// ---------- updateReservationPrice ----------
-const updateReservationPrice = async (id, newPrice) => {
+// =====================================================
+//  ACTUALIZAR PRECIO DE UNA RESERVA
+// =====================================================
+const updateReservationPrice = async (id, price) => {
     if (!id) return;
     try {
-        const reservaRef = doc(db, "reservas", id);
-        await updateDoc(reservaRef, { precio: newPrice });
+        await updateDoc(doc(db, "reservas", id), { precio: price });
     } catch (error) {
-        console.error(`Error al actualizar el precio de la reserva ${id}:`, error);
+        console.error(`Error al actualizar precio de reserva ${id}:`, error);
     }
 };
 
-// ---------- traerReservas (CORREGIDO: nombre + apellido reales) ----------
+// =====================================================
+//  TRAER RESERVAS DEL DÍA (para el calendario)
+// =====================================================
 export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales) => {
     if (!fechaSeleccionada) return [];
 
-    const year = fechaSeleccionada.getFullYear();
-    const month = (fechaSeleccionada.getMonth() + 1).toString().padStart(2, "0");
-    const day = fechaSeleccionada.getDate().toString().padStart(2, "0");
-    const fechaFormateada = `${year}-${month}-${day}`;
+    const y = fechaSeleccionada.getFullYear();
+    const m = `${fechaSeleccionada.getMonth() + 1}`.padStart(2, "0");
+    const d = `${fechaSeleccionada.getDate()}`.padStart(2, "0");
+    const fecha = `${y}-${m}-${d}`;
 
     try {
         const q = query(
             collection(db, "reservas"),
-            where("fecha", "==", fechaFormateada),
+            where("fecha", "==", fecha),
             where("consultorio", "==", consultorio)
         );
 
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) return [];
+        const snap = await getDocs(q);
+        if (snap.empty) return [];
 
         const reservas = [];
-        const usuariosCache = {};
+        const cache = {};
 
-        for (let d of snapshot.docs) {
-            const data = d.data();
+        for (let docu of snap.docs) {
+            const data = docu.data();
 
-            // ---- cargar perfil real del usuario ----
-            if (!usuariosCache[data.usuarioId]) {
-                const perfilSnap = await getDoc(doc(db, "usuarios", data.usuarioId));
-                if (perfilSnap.exists()) {
-                    usuariosCache[data.usuarioId] = perfilSnap.data();
-                } else {
-                    usuariosCache[data.usuarioId] = { nombre: "Desconocido", apellido: "" };
-                }
+            // 🔥 AHORA SOLO USAMOS psicologoId
+            const psicologoId = data.psicologoId;
+            if (!psicologoId) continue; // si por alguna razón no existe, salteamos
+
+            if (!cache[psicologoId]) {
+                const uSnap = await getDoc(doc(db, "usuarios", psicologoId));
+                cache[psicologoId] = uSnap.exists()
+                    ? uSnap.data()
+                    : { nombre: "Desconocido", apellido: "" };
             }
 
-            const perfil = usuariosCache[data.usuarioId];
+            const u = cache[psicologoId];
 
             reservas.push({
-                id: d.id,
+                id: docu.id,
                 ...data,
-                nombre: perfil.nombre,
-                apellido: perfil.apellido,
-                iniciales: getIniciales(perfil.nombre, perfil.apellido),
-                fecha: data.fecha,
+                nombre: u.nombre,
+                apellido: u.apellido,
+                iniciales: getIniciales(u.nombre, u.apellido),
                 fechaObj: new Date(`${data.fecha}T00:00:00`),
             });
         }
@@ -136,96 +154,129 @@ export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales
         );
 
         return reservas;
-
-    } catch (error) {
-        console.error("Error al traer reservas:", error);
+    } catch (e) {
+        console.error("Error traer reservas del día:", e);
         return [];
     }
 };
 
-// ---------- confirmarReserva ----------
+// =====================================================
+//  CONFIRMAR RESERVA (SOLO psicologoId, ADMIN = PRECIO 0)
+// =====================================================
 export const confirmarReserva = async ({
     reservaBase,
     tipoReserva,
     recurrenciaTipo,
     recurrenciaCantidad,
-    user,
-    traerReservas,
+    psicologo,
 }) => {
-    if (!reservaBase || !user) return;
+    if (!reservaBase || !psicologo) return;
 
     try {
-        const { horaInicio, horaFin, consultorio } = reservaBase;
         const { precioBase, precioDescuento } = await getPreciosConfig();
 
-        // ---- PERFIL REAL ----
-        const userRef = await getDoc(doc(db, "usuarios", user.uid));
-        const perfil = userRef.exists() ? userRef.data() : { nombre: "", apellido: "" };
+        // Perfil del psicólogo
+        const snap = await getDoc(doc(db, "usuarios", psicologo.uid));
+        const perfil = snap.exists() ? snap.data() : {};
 
-        const reservasUsuarioExistentes = await traerReservasUsuario(user.uid);
+        const esAdmin = perfil.rol === "admin";
 
-        const reservasPlaneadas = [];
+        // Reservas ya existentes del psicólogo
+        const existentes = await traerReservasUsuario(psicologo.uid);
+
+        // ---------------------------------------------
+        // GENERAR TODAS LAS FECHAS
+        // ---------------------------------------------
         const baseDate = new Date(`${reservaBase.fecha}T00:00:00`);
 
-        let cantidad = 1;
-        if (tipoReserva === "Recurrente") {
-            cantidad = Math.max(1, recurrenciaCantidad);
-            if (recurrenciaTipo === "Mensual") cantidad *= 4;
-            if (recurrenciaTipo === "Anual") cantidad *= 52;
-        }
+        const total =
+            tipoReserva === "Recurrente"
+                ? recurrenciaTipo === "Mensual"
+                    ? recurrenciaCantidad * 4
+                    : recurrenciaTipo === "Anual"
+                        ? recurrenciaCantidad * 52
+                        : recurrenciaCantidad
+                : 1;
 
-        for (let i = 0; i < cantidad; i++) {
-            const currentDate = new Date(baseDate);
-            currentDate.setDate(baseDate.getDate() + 7 * i);
-            const fechaStr = currentDate.toISOString().split("T")[0];
+        const nuevas = [];
 
-            reservasPlaneadas.push({
-                usuarioId: user.uid,
-                nombre: perfil.nombre,
-                apellido: perfil.apellido,
-                email: user.email,
+        for (let i = 0; i < total; i++) {
+            const date = new Date(baseDate);
+            // Para ahora seguimos usando salto semanal (multiplicando por 7)
+            date.setDate(baseDate.getDate() + i * 7);
+
+            const fechaStr = date.toISOString().split("T")[0];
+
+            nuevas.push({
+                psicologoId: psicologo.uid, // 🔥 ÚNICO ID DE VÍNCULO
+                nombre: perfil.nombre || "",
+                apellido: perfil.apellido || "",
+                email: psicologo.email,
                 fecha: fechaStr,
-                fechaObj: new Date(`${fechaStr}T00:00:00`),
-                horaInicio,
-                horaFin,
-                consultorio,
-                estado: "pendiente",
-                tipo: tipoReserva === "Ocasional" ? "Ocasional" : `Recurrente ${recurrenciaTipo}`,
+                fechaObj: date,
+                horaInicio: reservaBase.horaInicio,
+                horaFin: reservaBase.horaFin,
+                consultorio: reservaBase.consultorio,
+                tipo:
+                    tipoReserva === "Ocasional"
+                        ? "Ocasional"
+                        : `Recurrente ${recurrenciaTipo}`,
+                precio: null,
+                pagado: false,
             });
         }
 
-        // ---- Agrupar por semana ----
+        // =====================================================
+        // SI ES ADMIN: TODO PRECIO = 0
+        // =====================================================
+        if (esAdmin) {
+            nuevas.forEach((r) => (r.precio = 0));
+            await Promise.all(
+                nuevas.map((r) => {
+                    const { fechaObj, ...rest } = r;
+                    return addDoc(collection(db, "reservas"), rest);
+                })
+            );
+            return;
+        }
+
+        // =====================================================
+        // DESCUENTO POR SEMANA (10+ reservas)
+        // =====================================================
+        const todas = [...existentes, ...nuevas];
         const semanas = {};
-        [...reservasUsuarioExistentes, ...reservasPlaneadas].forEach((r) => {
+
+        todas.forEach((r) => {
             const lunes = getMonday(r.fechaObj).toISOString().split("T")[0];
             if (!semanas[lunes]) semanas[lunes] = [];
             semanas[lunes].push(r);
         });
 
-        Object.values(semanas).forEach((reservasSemana) => {
-            const aplicaDescuento = reservasSemana.length >= 10;
-            reservasSemana.forEach((r) => {
-                r.precio = aplicaDescuento ? precioDescuento : precioBase;
+        Object.values(semanas).forEach((lista) => {
+            const descuento = lista.length >= 10;
+            lista.forEach((r) => {
+                r.precio = descuento ? precioDescuento : precioBase;
             });
         });
 
-        // ---- guardar ----
+        // Asegurar que ningún precio quede null
+        nuevas.forEach((r) => {
+            if (r.precio == null) r.precio = precioBase;
+        });
+
+        // GUARDAR NUEVAS
         await Promise.all(
-            reservasPlaneadas.map((r) => {
+            nuevas.map((r) => {
                 const { fechaObj, ...rest } = r;
                 return addDoc(collection(db, "reservas"), rest);
             })
         );
 
-        // ---- actualizar existentes ----
-        const updates = reservasUsuarioExistentes
-            .filter((r) => r.precio !== precioBase)
-            .map((r) => updateReservationPrice(r.id, r.precio));
-
-        await Promise.all(updates);
-
-        if (traerReservas) await traerReservas();
+        // Actualizar precios de las reservas viejas si cambiaron
+        await Promise.all(
+            existentes.map((r) => updateReservationPrice(r.id, r.precio))
+        );
     } catch (error) {
-        console.error("Error al confirmar reserva:", error);
+        console.error("ERROR confirmando reserva:", error);
     }
 };

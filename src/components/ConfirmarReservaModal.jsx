@@ -35,10 +35,13 @@ const ConfirmarReservaModal = ({
                 tipoReserva,
                 recurrenciaTipo,
                 recurrenciaCantidad,
-                user,
-                traerReservas: cargarReservas,
+                psicologo: user,
             });
 
+            // 🔥 ACTUALIZAR HORARIOS DEL DÍA
+            await cargarReservas();
+
+            // 🔥 ACTUALIZAR MIS RESERVAS
             await actualizarMisReservas?.();
 
             showNotification(
@@ -68,12 +71,10 @@ const ConfirmarReservaModal = ({
 
             <div className="bg-white w-full max-w-md p-6 rounded-2xl shadow-2xl border border-gray-200 animate-slideUp">
 
-                {/* HEADER */}
                 <h2 className="text-2xl font-extrabold text-blue-800 text-center mb-6 tracking-wide">
                     Confirmar Reserva
                 </h2>
 
-                {/* INFO BOX */}
                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 mb-6 space-y-2">
                     <div className="flex items-center gap-2 text-gray-700">
                         <CalendarDays size={20} className="text-blue-600" />
@@ -91,7 +92,6 @@ const ConfirmarReservaModal = ({
                     </div>
                 </div>
 
-                {/* SELECT TIPO */}
                 <label className="font-semibold text-gray-700">Tipo de reserva</label>
                 <select
                     value={tipoReserva}
@@ -102,7 +102,6 @@ const ConfirmarReservaModal = ({
                     <option value="Recurrente">Recurrente</option>
                 </select>
 
-                {/* RECURRENCIA */}
                 {tipoReserva === "Recurrente" && (
                     <>
                         <div className="mt-5">
@@ -128,19 +127,17 @@ const ConfirmarReservaModal = ({
                                 className="w-full mt-1 p-3 border rounded-lg bg-gray-100 focus:ring-2 focus:ring-blue-400"
                             />
                             <p className="text-xs text-gray-500 mt-1">
-                                Semanal = ×1 · Mensual = ×4 · Anual = ×52
                             </p>
                         </div>
                     </>
                 )}
 
-                {/* BOTONES */}
                 <div className="flex justify-between mt-8">
 
                     <button
                         onClick={() => setIsReservaModalOpen(false)}
                         className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 
-                                   text-gray-700 font-semibold transition"
+                                    text-gray-700 font-semibold transition"
                         disabled={loading}
                     >
                         Cancelar
@@ -150,7 +147,7 @@ const ConfirmarReservaModal = ({
                         onClick={handleConfirmar}
                         disabled={loading}
                         className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 
-                                   text-white font-bold shadow-md transition"
+                                    text-white font-bold shadow-md transition"
                     >
                         {loading ? "Confirmando..." : "Confirmar"}
                     </button>

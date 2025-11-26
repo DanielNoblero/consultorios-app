@@ -5,7 +5,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "usuarioId",
+          "fieldPath": "psicologoId",
           "order": "ASCENDING"
         },
         {

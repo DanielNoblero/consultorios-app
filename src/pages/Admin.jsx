@@ -23,32 +23,34 @@ import {
 const CONFIG_DOC_ID = "precioConsulta";
 
 const Admin = () => {
-    const [usuarios, setUsuarios] = useState([]);
+    const [psicologos, setPsicologos] = useState([]);
     const [reservas, setReservas] = useState([]);
+
     const [precioConsulta, setPrecioConsulta] = useState(250);
-    const [precioDescuento, setPrecioDescuento] = useState(230); // ✅ Nuevo campo
+    const [precioDescuento, setPrecioDescuento] = useState(230);
+
     const [acordeonesAbiertos, setAcordeonesAbiertos] = useState({});
     const [expandAll, setExpandAll] = useState(false);
     const [isSavingPrice, setIsSavingPrice] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [esMobile, setEsMobile] = useState(window.innerWidth < 768);
 
-    useEffect(() => {
-        const handleResize = () => setEsMobile(window.innerWidth < 768);
-        window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
-    }, []);
-    //Resunmen del mes actual plata
     const [totalConsultasMes, setTotalConsultasMes] = useState(0);
     const [totalDineroMes, setTotalDineroMes] = useState(0);
 
-    // Estados para el modal
     const [modalVisible, setModalVisible] = useState(false);
     const [modalMessage, setModalMessage] = useState("");
     const [modalTitle, setModalTitle] = useState("");
     const [modalConfirm, setModalConfirm] = useState(null);
 
-    // --- FETCH RESERVAS ---
+    // Detectar mobile
+    useEffect(() => {
+        const handleResize = () => setEsMobile(window.innerWidth < 768);
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    // Fetch reservas
     useEffect(() => {
         const unsub = onSnapshot(collection(db, "reservas"), (snapshot) => {
             setReservas(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
@@ -56,33 +58,29 @@ const Admin = () => {
         return () => unsub();
     }, []);
 
-    // --- FETCH USUARIOS ---
+    // Fetch psicólogos
     useEffect(() => {
         const unsub = onSnapshot(collection(db, "usuarios"), (snapshot) => {
-            setUsuarios(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+            setPsicologos(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
             setIsLoading(false);
         });
         return () => unsub();
     }, []);
 
-    // cálculo del reporte mensual
+    // Resumen mensual
     useEffect(() => {
         if (reservas.length === 0) return;
 
         const reservasMes = reservas.filter(r => esReservaDelMesActual(r.fecha));
 
         const cantidad = reservasMes.length;
-
-        const total = reservasMes.reduce(
-            (acc, r) => acc + parseFloat(r.precio || 0),
-            0
-        );
+        const total = reservasMes.reduce((acc, r) => acc + parseFloat(r.precio || 0), 0);
 
         setTotalConsultasMes(cantidad);
         setTotalDineroMes(total);
     }, [reservas]);
 
-    // --- FETCH PRECIOS CONFIGURADOS ---
+    // Cargar precios
     useEffect(() => {
         const fetchPrecio = async () => {
             const ref = doc(db, "configuracion", CONFIG_DOC_ID);
@@ -96,20 +94,7 @@ const Admin = () => {
         fetchPrecio();
     }, []);
 
-    // --- MODAL FUNCIONES ---
-    const openModal = (title, message, confirmAction = null) => {
-        setModalTitle(title);
-        setModalMessage(message);
-        setModalConfirm(() => confirmAction);
-        setModalVisible(true);
-    };
-
-    /**
-     * Comprueba si la reserva es del mes actual.
-     * @param {string} fechaStr La fecha de la reserva en formato 'YYYY-MM-DD'.
-     */
     const esReservaDelMesActual = (fechaStr) => {
-        // Usamos una hora al final para una construcción de Date más robusta, aunque solo compare mes/año
         const fecha = new Date(`${fechaStr}T12:00:00`);
         const now = new Date();
         return (
@@ -118,13 +103,19 @@ const Admin = () => {
         );
     };
 
+    const openModal = (title, message, confirmAction = null) => {
+        setModalTitle(title);
+        setModalMessage(message);
+        setModalConfirm(() => confirmAction);
+        setModalVisible(true);
+    };
+
     const closeModal = () => {
         setModalVisible(false);
         setModalMessage("");
         setModalConfirm(null);
     };
 
-    // --- GUARDAR PRECIOS ---
     const handleGuardarPrecio = async () => {
         setIsSavingPrice(true);
         try {
@@ -139,61 +130,54 @@ const Admin = () => {
             );
             openModal("✅ Éxito", "Precios actualizados correctamente.");
         } catch (error) {
-            console.error(error);
             openModal("❌ Error", "Error al actualizar los precios.");
         } finally {
             setIsSavingPrice(false);
         }
     };
 
-    // --- CAMBIAR ROL ---
-    const handleCambiarRol = async (usuarioId, nuevoRol) => {
-        const usuario = usuarios.find((u) => u.id === usuarioId);
+    const handleCambiarRol = async (psicologoId, nuevoRol) => {
+        const psicologo = psicologos.find((p) => p.id === psicologoId);
         openModal(
             "Cambiar Rol",
-            `¿Seguro que quieres cambiar el rol de ${usuario?.nombre || "este usuario"
-            } a ${nuevoRol}?`,
+            `¿Seguro que quieres cambiar el rol de ${psicologo?.nombre || "este psicólogo"} a ${nuevoRol}?`,
             async () => {
                 try {
-                    const usuarioRef = doc(db, "usuarios", usuarioId);
-                    await updateDoc(usuarioRef, { rol: nuevoRol });
+                    const ref = doc(db, "usuarios", psicologoId);
+                    await updateDoc(ref, { rol: nuevoRol });
                     openModal("✅ Éxito", "Rol actualizado correctamente");
                 } catch (error) {
-                    console.error(error);
-                    openModal("❌ Error", "Hubo un error al actualizar el rol.");
+                    openModal("❌ Error", "Error al actualizar el rol.");
                 }
             }
         );
     };
 
-    // --- CALCULAR DEUDA ---
-    const calcularDeudaDelMes = (usuarioId) =>
+    // 🔥 AHORA SOLO COMPARA CONTRA psicologoId
+    const calcularDeudaDelMes = (psicologoId) =>
         reservas
             .filter(
                 (r) =>
-                    (r.usuarioId === usuarioId || r.userId === usuarioId) &&
+                    r.psicologoId === psicologoId &&
                     !r.pagado &&
                     esReservaDelMesActual(r.fecha)
             )
             .reduce((acc, r) => acc + parseFloat(r.precio || 0), 0)
             .toFixed(2);
 
-    // --- ELIMINAR RESERVA ---
     const handleEliminar = async (id) => {
         openModal("Eliminar Reserva", "¿Seguro que deseas eliminar esta reserva?", async () => {
             try {
                 await deleteDoc(doc(db, "reservas", id));
                 openModal("🗑️ Eliminada", "Reserva eliminada correctamente.");
             } catch (error) {
-                console.error(error);
                 openModal("❌ Error", "Error al eliminar la reserva.");
             }
         });
     };
-    // Generar Reporte Mensual
+
     const generarReporte = async () => {
         const url = "https://us-central1-consultorio-4e6c5.cloudfunctions.net/generarReporteManual";
-
         const response = await fetch(url);
         const blob = await response.blob();
 
@@ -203,15 +187,13 @@ const Admin = () => {
         link.click();
     };
 
-    // --- CAMBIAR ESTADO DE PAGO ---
     const togglePago = async (reserva) => {
         try {
             const ref = doc(db, "reservas", reserva.id);
             await updateDoc(ref, { pagado: !reserva.pagado });
-            openModal("✅ Actualizado", "El estado de pago se cambió correctamente.");
+            openModal("✅ Actualizado", "Estado de pago actualizado.");
         } catch (error) {
-            console.error(error);
-            openModal("❌ Error", "Error al actualizar el estado de pago.");
+            openModal("❌ Error", "Error al actualizar estado de pago.");
         }
     };
 
@@ -226,7 +208,7 @@ const Admin = () => {
         );
     }
 
-    const usuariosOrdenados = [...usuarios].sort((a, b) => {
+    const psicologosOrdenados = [...psicologos].sort((a, b) => {
         if (a.rol === "admin") return -1;
         if (b.rol === "admin") return 1;
         if (a.rol === "psicologo") return -1;
@@ -236,11 +218,13 @@ const Admin = () => {
 
     return (
         <div className="max-w-7xl mx-auto p-4 sm:p-6 md:p-8 mt-24 sm:mt-70 bg-gray-50 min-h-screen">
+
             <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-blue-800 mb-8 border-b-4 border-blue-200 pb-2">
-                <Home className="inline h-8 w-8 mr-3 mb-1 text-blue-600" /> Panel de
-                Administración
+                <Home className="inline h-8 w-8 mr-3 mb-1 text-blue-600" />
+                Panel de Administración
             </h1>
-            {/* RESUMEN FINANCIERO DEL MES */}
+
+            {/* --- RESUMEN FINANCIERO --- */}
             <div className="mb-8 p-6 bg-white rounded-xl shadow-2xl border border-green-200">
                 <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
                     <DollarSign className="h-6 w-6 mr-2 text-green-600" />
@@ -250,33 +234,29 @@ const Admin = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="p-4 bg-green-50 border-l-4 border-green-600 rounded-lg shadow-sm">
                         <p className="text-lg font-semibold text-gray-700">Consultas realizadas:</p>
-                        <p className="text-3xl font-extrabold text-green-700 mt-1">
-                            {totalConsultasMes}
-                        </p>
+                        <p className="text-3xl font-extrabold text-green-700 mt-1">{totalConsultasMes}</p>
                     </div>
+
                     <div className="p-4 bg-blue-50 border-l-4 border-blue-600 rounded-lg shadow-sm">
                         <p className="text-lg font-semibold text-gray-700">Total generado ($):</p>
-                        <p className="text-3xl font-extrabold text-blue-700 mt-1">
-                            ${totalDineroMes.toFixed(2)}
-                        </p>
+                        <p className="text-3xl font-extrabold text-blue-700 mt-1">${totalDineroMes.toFixed(2)}</p>
                     </div>
-
                 </div>
 
-                <p className="text-sm text-gray-500 mt-4">* Cálculo automático en tiempo real.</p>
-                <button onClick={generarReporte} className="text-white px-6 py-3 rounded-lg transition font-bold shadow-md md:ml-4 bg-green-600 hover:bg-green-700 flex items-center justify-center mt-4">
+                <button
+                    onClick={generarReporte}
+                    className="text-white px-6 py-3 rounded-lg transition font-bold shadow-md bg-green-600 hover:bg-green-700 flex items-center justify-center mt-4"
+                >
                     Generar Reporte Mensual
                 </button>
             </div>
 
-            {/* --- SECCIÓN: CONFIGURACIÓN GENERAL --- */}
+            {/* --- CONFIGURACIÓN --- */}
             <div className="mb-8 p-6 bg-white rounded-xl shadow-2xl border border-blue-100">
                 <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
-                    <DollarSign className="h-6 w-6 mr-2 text-green-600" /> Configuración de
-                    Precios
+                    <DollarSign className="h-6 w-6 mr-2 text-green-600" /> Configuración de Precios
                 </h2>
 
-                {/* ✅ Campo de precio base */}
                 <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
                     <label className="font-semibold text-lg text-gray-600">
                         Precio Base de la Consulta ($):
@@ -286,12 +266,9 @@ const Admin = () => {
                         value={precioConsulta}
                         onChange={(e) => setPrecioConsulta(e.target.value)}
                         className="border border-gray-300 rounded-lg p-3 w-full md:w-48 focus:ring-2 focus:ring-blue-500 transition shadow-sm text-lg"
-                        placeholder="Ej: 300.00"
-                        disabled={isSavingPrice}
                     />
                 </div>
 
-                {/* ✅ Campo de precio con descuento */}
                 <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
                     <label className="font-semibold text-lg text-gray-600">
                         Precio con Descuento (+10 reservas) ($):
@@ -301,39 +278,26 @@ const Admin = () => {
                         value={precioDescuento}
                         onChange={(e) => setPrecioDescuento(e.target.value)}
                         className="border border-gray-300 rounded-lg p-3 w-full md:w-48 focus:ring-2 focus:ring-green-500 transition shadow-sm text-lg"
-                        placeholder="Ej: 230.00"
-                        disabled={isSavingPrice}
                     />
                 </div>
 
                 <button
                     onClick={handleGuardarPrecio}
-                    className={`text-white px-6 py-3 rounded-lg transition font-bold shadow-md md:ml-4 ${isSavingPrice
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-blue-600 hover:bg-blue-700"
+                    className={`text-white px-6 py-3 rounded-lg transition font-bold shadow-md ${isSavingPrice ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
                         } flex items-center justify-center`}
-                    disabled={isSavingPrice}
                 >
-                    {isSavingPrice ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    ) : (
-                        <CheckCircle className="h-5 w-5 mr-2" />
-                    )}
                     {isSavingPrice ? "Guardando..." : "Guardar Precios"}
                 </button>
-
             </div>
 
-            {/* --- SECCIÓN: USUARIOS Y DEUDA --- */}
+            {/* --- PSICÓLOGOS Y DEUDA --- */}
             <div className="mb-10 p-6 bg-white rounded-xl shadow-2xl border border-red-100">
-
                 <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center justify-between">
                     <span className="flex items-center">
                         <Users className="h-6 w-6 mr-2 text-red-600" />
-                        Gestión de Profesionales y Finanzas
+                        Gestión de Psicólogos y Finanzas
                     </span>
 
-                    {/* ⭐ BOTÓN GLOBAL EXPANDIR/CONTRAER (SOLO MOBILE) */}
                     {esMobile && (
                         <button
                             onClick={() => setExpandAll(!expandAll)}
@@ -348,40 +312,38 @@ const Admin = () => {
                     )}
                 </h2>
 
-                {/* VERSION MOBILE */}
+                {/* Mobile */}
                 {esMobile ? (
                     <div className="space-y-4">
-                        {usuariosOrdenados.map(u => {
-                            const deuda = parseFloat(calcularDeudaDelMes(u.id));
+                        {psicologosOrdenados.map((p) => {
+                            const deuda = parseFloat(calcularDeudaDelMes(p.id));
                             const tieneDeuda = deuda > 0;
 
                             return (
                                 <div
-                                    key={u.id}
+                                    key={p.id}
                                     className={`p-4 rounded-xl shadow-md border ${tieneDeuda ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
                                         }`}
                                 >
                                     <div className="flex justify-between items-center mb-3">
-                                        <h3 className="text-lg font-bold text-gray-900">{u.nombre}</h3>
+                                        <h3 className="text-lg font-bold text-gray-900">{p.nombre}</h3>
                                         <span
-                                            className={`px-2 py-1 rounded-md text-xs font-semibold ${u.rol === "admin"
-                                                    ? "bg-yellow-100 text-yellow-700"
-                                                    : u.rol === "psicologo"
-                                                        ? "bg-blue-100 text-blue-700"
-                                                        : "bg-gray-200 text-gray-700"
+                                            className={`px-2 py-1 rounded-md text-xs font-semibold ${p.rol === "admin"
+                                                ? "bg-yellow-100 text-yellow-700"
+                                                : p.rol === "psicologo"
+                                                    ? "bg-blue-100 text-blue-700"
+                                                    : "bg-gray-200 text-gray-700"
                                                 }`}
                                         >
-                                            {u.rol}
+                                            {p.rol}
                                         </span>
                                     </div>
 
-                                    {/* ⭐ CONTENIDO EXPANDIBLE */}
                                     {expandAll && (
                                         <>
                                             <p className="text-sm text-gray-700">
-                                                📧 {u.email}
-                                                <br />
-                                                📱 {u.telefono}
+                                                📧 {p.email}
+                                                <br />📱 {p.telefono}
                                             </p>
 
                                             <p
@@ -396,13 +358,14 @@ const Admin = () => {
                                                     Cambiar rol:
                                                 </label>
                                                 <select
-                                                    value={u.rol || "usuario"}
-                                                    onChange={(e) => handleCambiarRol(u.id, e.target.value)}
+                                                    value={p.rol || "psicologo"}
+                                                    onChange={(e) =>
+                                                        handleCambiarRol(p.id, e.target.value)
+                                                    }
                                                     className="w-full p-2 rounded-md border bg-white shadow-sm text-sm"
                                                 >
                                                     <option value="psicologo">Psicólogo</option>
                                                     <option value="admin">Admin</option>
-                                                    <option value="usuario">Usuario</option>
                                                 </select>
                                             </div>
                                         </>
@@ -412,7 +375,7 @@ const Admin = () => {
                         })}
                     </div>
                 ) : (
-                    // 🔥 VERSIÓN DESKTOP (tu tabla original)
+                    // Desktop table
                     <div className="overflow-x-auto">
                         <table className="w-full min-w-[700px] border-collapse rounded-xl overflow-hidden shadow-lg">
                             <thead className="bg-red-600 text-white text-left text-sm uppercase tracking-wider">
@@ -423,26 +386,28 @@ const Admin = () => {
                                     <th className="px-4 py-3 text-center">Rol (Cambiar)</th>
                                 </tr>
                             </thead>
+
                             <tbody className="divide-y divide-gray-200">
-                                {usuariosOrdenados.map(u => {
-                                    const deuda = parseFloat(calcularDeudaDelMes(u.id));
+                                {psicologosOrdenados.map((p) => {
+                                    const deuda = parseFloat(calcularDeudaDelMes(p.id));
                                     const tieneDeuda = deuda > 0;
-                                    const rowClass = tieneDeuda
-                                        ? "bg-red-50 hover:bg-red-100"
-                                        : "even:bg-gray-50 hover:bg-gray-100";
-                                    const rolColor =
-                                        u.rol === "admin"
-                                            ? "text-yellow-600 font-extrabold"
-                                            : u.rol === "psicologo"
-                                                ? "text-blue-600 font-semibold"
-                                                : "text-gray-500";
 
                                     return (
-                                        <tr key={u.id} className={rowClass}>
-                                            <td className="px-4 py-3 font-medium text-gray-900">{u.nombre || "N/A"}</td>
+                                        <tr
+                                            key={p.id}
+                                            className={`${tieneDeuda
+                                                ? "bg-red-50 hover:bg-red-100"
+                                                : "even:bg-gray-50 hover:bg-gray-100"
+                                                }`}
+                                        >
+                                            <td className="px-4 py-3 font-medium text-gray-900">
+                                                {p.nombre || "Psicólogo sin nombre"}
+                                            </td>
                                             <td className="px-4 py-3 text-sm text-gray-600">
-                                                {u.email}
-                                                <span className="block text-xs text-gray-500">{u.telefono}</span>
+                                                {p.email}
+                                                <span className="block text-xs text-gray-500">
+                                                    {p.telefono}
+                                                </span>
                                             </td>
                                             <td
                                                 className={`px-4 py-3 text-center text-lg ${tieneDeuda
@@ -452,15 +417,15 @@ const Admin = () => {
                                             >
                                                 ${deuda.toFixed(2)}
                                             </td>
+
                                             <td className="px-4 py-3 text-center">
                                                 <select
-                                                    value={u.rol || "usuario"}
-                                                    onChange={(e) => handleCambiarRol(u.id, e.target.value)}
-                                                    className={`border-2 border-gray-300 rounded-lg p-2 w-full max-w-[150px] bg-white text-sm shadow-inner ${rolColor}`}
+                                                    value={p.rol || "psicologo"}
+                                                    onChange={(e) => handleCambiarRol(p.id, e.target.value)}
+                                                    className="border-2 border-gray-300 rounded-lg p-2 w-full max-w-[150px] bg-white text-sm shadow-inner"
                                                 >
                                                     <option value="psicologo">Psicólogo</option>
                                                     <option value="admin">Admin</option>
-                                                    <option value="usuario">Usuario</option>
                                                 </select>
                                             </td>
                                         </tr>
@@ -472,49 +437,43 @@ const Admin = () => {
                 )}
             </div>
 
-            {/* --- SECCIÓN: DETALLE DE RESERVAS --- */}
+            {/* --- DETALLES POR PSICÓLOGO --- */}
             <div className="mb-8">
                 <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
-                    <Calendar className="h-6 w-6 mr-2 text-blue-600" /> Detalle de Reservas
+                    <Calendar className="h-6 w-6 mr-2 text-blue-600" />
+                    Detalle de Reservas
                 </h2>
-                <div className="space-y-4">
-                    {usuariosOrdenados.map(usuario => {
-                        let reservasUsuario = reservas
-                            .filter(r => r.usuarioId === usuario.id || r.userId === usuario.id)
-                            .filter(r => esReservaDelMesActual(r.fecha));
 
-                        // ✅ Lógica de ordenamiento: Por fecha (ascendente) y luego por hora de inicio (ascendente)
-                        reservasUsuario.sort((a, b) => {
+                <div className="space-y-4">
+                    {psicologosOrdenados.map((p) => {
+                        // 🔥 SOLO psicologoId
+                        let reservasPsicologo = reservas
+                            .filter((r) => r.psicologoId === p.id)
+                            .filter((r) => esReservaDelMesActual(r.fecha));
+
+                        reservasPsicologo.sort((a, b) => {
                             const dateA = new Date(`${a.fecha}T${a.horaInicio}`);
                             const dateB = new Date(`${b.fecha}T${b.horaInicio}`);
 
-                            if (isNaN(dateA) || isNaN(dateB)) {
-                                // Fallback para fechas inválidas, ordenar por fecha string y hora string
-                                if (a.fecha !== b.fecha) {
-                                    return a.fecha.localeCompare(b.fecha);
-                                }
-                                return a.horaInicio.localeCompare(b.horaInicio);
-                            }
-
-                            return dateA.getTime() - dateB.getTime();
+                            return dateA - dateB;
                         });
 
-                        if (reservasUsuario.length === 0) return null;
+                        if (reservasPsicologo.length === 0) return null;
 
-                        const deudaTotal = calcularDeudaDelMes(usuario.id);
+                        const deudaTotal = calcularDeudaDelMes(p.id);
                         const tieneDeuda = parseFloat(deudaTotal) > 0;
-                        const isOpen = acordeonesAbiertos[usuario.id];
+                        const isOpen = acordeonesAbiertos[p.id];
 
                         return (
                             <div
-                                key={usuario.id}
+                                key={p.id}
                                 className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
                             >
                                 <button
                                     onClick={() =>
-                                        setAcordeonesAbiertos(prev => ({
+                                        setAcordeonesAbiertos((prev) => ({
                                             ...prev,
-                                            [usuario.id]: !prev[usuario.id],
+                                            [p.id]: !prev[p.id],
                                         }))
                                     }
                                     className={`w-full flex justify-between items-center p-4 text-left ${tieneDeuda
@@ -524,11 +483,12 @@ const Admin = () => {
                                 >
                                     <div>
                                         <span className="text-lg font-bold text-gray-800 flex items-center">
-                                            {usuario.nombre || "Usuario sin nombre"}
+                                            {p.nombre || "Psicólogo sin nombre"}
                                             <span className="ml-3 px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-semibold uppercase">
-                                                {usuario.rol || "Usuario"}
+                                                {p.rol}
                                             </span>
                                         </span>
+
                                         <span
                                             className={`block text-sm font-semibold mt-1 ${tieneDeuda ? "text-red-600" : "text-green-600"
                                                 }`}
@@ -536,6 +496,7 @@ const Admin = () => {
                                             Deuda Pendiente: ${deudaTotal}
                                         </span>
                                     </div>
+
                                     {isOpen ? (
                                         <ChevronUp className="h-6 w-6 text-gray-600" />
                                     ) : (
@@ -549,60 +510,81 @@ const Admin = () => {
                                             <table className="w-full min-w-[480px] text-[12px] sm:text-xs border-collapse">
                                                 <thead className="bg-gray-200 text-gray-700 uppercase">
                                                     <tr>
-                                                        <th className="px-0.5 py-0.5 text-left">Consultorio</th>
+                                                        <th className="px-0.5 py-0.5 text-left">
+                                                            Consultorio
+                                                        </th>
                                                         <th className="px-0.5 py-0.5">Fecha/Hora</th>
                                                         <th className="px-0.5 py-0.5">Precio ($)</th>
                                                         <th className="px-0.5 py-0.5">Estado</th>
                                                         <th className="px-0.5 py-0.5">Acciones</th>
                                                     </tr>
                                                 </thead>
+
                                                 <tbody className="divide-y divide-gray-100">
-                                                    {reservasUsuario.map(r => (
+                                                    {reservasPsicologo.map((r) => (
                                                         <tr
                                                             key={r.id}
-                                                            className={`text-center ${r.pagado ? "bg-white" : "bg-yellow-50"
+                                                            className={`text-center ${r.pagado
+                                                                ? "bg-white"
+                                                                : "bg-yellow-50"
                                                                 } hover:bg-gray-100`}
                                                         >
-                                                            <td className="px-1 py-2  text-left font-medium">
+                                                            <td className="px-1 py-2 text-left font-medium">
                                                                 {r.consultorio}
                                                             </td>
-                                                            <td className="px-1 py-2 ">
+
+                                                            <td className="px-1 py-2">
                                                                 {r.fecha} - {r.horaInicio} a {r.horaFin}
                                                             </td>
+
                                                             <td
-                                                                className={`px-1 py-2 font-semibold ${r.pagado ? "text-gray-600" : "text-red-500"
+                                                                className={`px-1 py-2 font-semibold ${r.pagado
+                                                                    ? "text-gray-600"
+                                                                    : "text-red-500"
                                                                     }`}
                                                             >
                                                                 ${r.precio}
                                                             </td>
-                                                            <td className="px-1 py-2  text-sm font-semibold">
+
+                                                            <td className="px-1 py-2 text-sm font-semibold">
                                                                 {r.pagado ? (
                                                                     <span className="text-green-600 flex items-center justify-center">
-                                                                        <CheckCircle className="h-4 w-4 mr-1" /> Pagado
+                                                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                                                        Pagado
                                                                     </span>
                                                                 ) : (
                                                                     <span className="text-red-600 flex items-center justify-center">
-                                                                        <AlertTriangle className="h-4 w-4 mr-1" /> Deuda
+                                                                        <AlertTriangle className="h-4 w-4 mr-1" />
+                                                                        Deuda
                                                                     </span>
                                                                 )}
                                                             </td>
+
                                                             <td className="px-3 py-2 flex flex-col sm:flex-row justify-center gap-2">
-                                                                <button
-                                                                    onClick={() => togglePago(r)}
-                                                                    className={`px-2 py-1 rounded-md text-white text-xs font-semibold ${r.pagado
-                                                                        ? "bg-gray-500 hover:bg-gray-600"
-                                                                        : "bg-green-600 hover:bg-green-700"
-                                                                        }`}
-                                                                >
-                                                                    {r.pagado ? "Marcar Deuda" : "Marcar Pagado"}
-                                                                </button>
+
+                                                                {/* Solo ocultamos opciones de pago si el psicólogo es admin */}
+                                                                {p.rol !== "admin" && (
+                                                                    <button
+                                                                        onClick={() => togglePago(r)}
+                                                                        className={`px-2 py-1 rounded-md text-white text-xs font-semibold ${r.pagado
+                                                                                ? "bg-gray-500 hover:bg-gray-600"
+                                                                                : "bg-green-600 hover:bg-green-700"
+                                                                            }`}
+                                                                    >
+                                                                        {r.pagado ? "Marcar Deuda" : "Marcar Pagado"}
+                                                                    </button>
+                                                                )}
+
+                                                                {/* 🔥 Eliminar siempre visible para todos (incluido admin) */}
                                                                 <button
                                                                     onClick={() => handleEliminar(r.id)}
                                                                     className="bg-red-600 text-white px-2 py-1 rounded-md text-xs hover:bg-red-700"
                                                                 >
                                                                     Eliminar 🗑️
                                                                 </button>
+
                                                             </td>
+
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -616,12 +598,15 @@ const Admin = () => {
                 </div>
             </div>
 
-            {/* 🔹 MODAL GLOBAL 🔹 */}
+            {/* MODAL */}
             {modalVisible && (
                 <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
                     <div className="bg-white rounded-lg shadow-lg p-6 w-80 text-center">
-                        <h2 className="text-xl font-bold text-gray-800 mb-4">{modalTitle}</h2>
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">
+                            {modalTitle}
+                        </h2>
                         <p className="text-gray-700 mb-6">{modalMessage}</p>
+
                         <div className="flex justify-center gap-3">
                             {modalConfirm ? (
                                 <>

@@ -23,7 +23,7 @@ const ensureUserDoc = async (firebaseUser) => {
     if (!snap.exists()) {
         await setDoc(ref, {
             email: firebaseUser.email,
-            rol: "usuario",
+            rol: "psicologo",
             perfilCompleto: false,
             createdAt: new Date().toISOString(),
         });
@@ -54,14 +54,13 @@ export const AuthProvider = ({ children }) => {
 
                 unsubscribeUserDoc = onSnapshot(userRef, (snap) => {
                     const data = snap.exists() ? snap.data() : {};
-                    const isAdmin = data.rol === "admin";
 
                     setUser({
                         uid: firebaseUser.uid,
                         email: firebaseUser.email,
                         displayName: firebaseUser.displayName || null,
-                        ...data,       // nombre, apellido, telefono, perfilCompleto, rol, etc.
-                        isAdmin,
+                        ...data,
+                        isAdmin: data.rol === "admin",
                     });
 
                     setLoading(false);
