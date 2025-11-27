@@ -1,5 +1,7 @@
 // utils/horariosUtils.js
-export const generarHorarios = () => {
+
+// 🔥 Se genera solo una vez cuando se importa el archivo
+const HORARIOS_CACHE = (() => {
   const horarios = [];
   let hora = 8;
   let minutos = 0;
@@ -9,11 +11,9 @@ export const generarHorarios = () => {
       .toString()
       .padStart(2, "0")}`;
 
-    // Calcular fin (1 hora después)
     let finHora = hora + 1;
     let finMin = minutos;
 
-    // Si el bloque termina después de 22:00 → detener el bucle
     if (finHora > 22 || (finHora === 22 && finMin > 0)) break;
 
     const fin = `${finHora.toString().padStart(2, "0")}:${finMin
@@ -22,23 +22,23 @@ export const generarHorarios = () => {
 
     horarios.push({ inicio, fin });
 
-    // Avanzar media hora
     minutos += 30;
     if (minutos === 60) {
       minutos = 0;
       hora++;
     }
 
-    // Evitar que se cree un bloque extra que termine después de 22:00
     if (hora >= 22) break;
   }
 
   return horarios;
-};
+})();
+
+// 👍 Ahora no recalcula nunca
+export const generarHorarios = () => HORARIOS_CACHE;
 
 
-
-// 🔹 Calcula la hora de fin agregando 1 hora exacta al inicio
+// 🔹 Mantengo getHoraFin igual
 export const getHoraFin = (horaInicio) => {
   const [h, m] = horaInicio.split(":").map(Number);
   const fechaTemp = new Date();

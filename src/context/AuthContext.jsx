@@ -1,5 +1,12 @@
 // src/context/AuthContext.jsx
-import { createContext, useContext, useEffect, useState } from "react";
+// =============================================
+// CONTEXTO DE AUTENTICACIÓN OPTIMIZADO
+// - Unifica usuario de Firebase Auth + Firestore
+// - Crea /usuarios/{uid} si no existe
+// - Expone: user, loading, register, login, loginWithGoogle, logout
+// =============================================
+
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -15,31 +22,46 @@ const AuthContext = createContext(null);
 
 export const useAuth = () => useContext(AuthContext);
 
-// Crea el doc inicial en /usuarios/{uid} si no existe
+// 🟦 Instancia única del provider de Google (no se recrea en cada render)
+const googleProvider = new GoogleAuthProvider();
+
+// =====================================================
+// ensureUserDoc
+// - Garantiza que exista /usuarios/{uid} con datos básicos
+// - Se usa tanto en onAuthStateChanged como en los logins
+// =====================================================
 const ensureUserDoc = async (firebaseUser) => {
     const ref = doc(db, "usuarios", firebaseUser.uid);
-    const snap = await getDoc(ref);
 
-    if (!snap.exists()) {
-        await setDoc(ref, {
-            email: firebaseUser.email,
-            rol: "psicologo",
-            perfilCompleto: false,
-            createdAt: new Date().toISOString(),
-        });
+    try {
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+            await setDoc(ref, {
+                email: firebaseUser.email,
+                rol: "psicologo",
+                perfilCompleto: false,
+                createdAt: new Date().toISOString(),
+            });
+        }
+
+        return ref;
+    } catch (error) {
+        console.error("Error en ensureUserDoc:", error);
+        // En caso de error igual devolvemos la referencia para no romper el flujo
+        return ref;
     }
-
-    return ref;
 };
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null); // mezcla auth + firestore
+    const [user, setUser] = useState(null); // mezcla Auth + Firestore
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let unsubscribeUserDoc = null;
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+            // 🔹 No hay usuario autenticado
             if (!firebaseUser) {
                 if (unsubscribeUserDoc) unsubscribeUserDoc();
                 setUser(null);
@@ -48,23 +70,44 @@ export const AuthProvider = ({ children }) => {
             }
 
             try {
+                // 🔹 Asegurar doc en /usuarios/{uid}
                 const userRef = await ensureUserDoc(firebaseUser);
 
+                // Cortar listener anterior si existía
                 if (unsubscribeUserDoc) unsubscribeUserDoc();
 
-                unsubscribeUserDoc = onSnapshot(userRef, (snap) => {
-                    const data = snap.exists() ? snap.data() : {};
+                // 🔹 Suscripción en tiempo real al doc del usuario
+                unsubscribeUserDoc = onSnapshot(
+                    userRef,
+                    (snap) => {
+                        const data = snap.exists() ? snap.data() : {};
 
-                    setUser({
-                        uid: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        displayName: firebaseUser.displayName || null,
-                        ...data,
-                        isAdmin: data.rol === "admin",
-                    });
+                        setUser({
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email,
+                            displayName: firebaseUser.displayName || null,
+                            ...data,
+                            isAdmin: data.rol === "admin",
+                        });
 
-                    setLoading(false);
-                });
+                        setLoading(false);
+                    },
+                    (error) => {
+                        console.error("Error en onSnapshot usuario:", error);
+
+                        // Fallback mínimo para no dejar al usuario colgado
+                        setUser({
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email,
+                            displayName: firebaseUser.displayName || null,
+                            rol: "usuario",
+                            perfilCompleto: false,
+                            isAdmin: false,
+                        });
+
+                        setLoading(false);
+                    }
+                );
             } catch (error) {
                 console.error("Error cargando datos del usuario:", error);
 
@@ -87,6 +130,9 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
+    // =====================================================
+    // MÉTODOS PÚBLICOS
+    // =====================================================
     const register = async (email, password) => {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         await ensureUserDoc(cred.user);
@@ -97,24 +143,29 @@ export const AuthProvider = ({ children }) => {
     };
 
     const loginWithGoogle = async () => {
-        const provider = new GoogleAuthProvider();
-        const cred = await signInWithPopup(auth, provider);
+        const cred = await signInWithPopup(auth, googleProvider);
         await ensureUserDoc(cred.user);
     };
 
     const logout = () => signOut(auth);
 
+    // =====================================================
+    // value MEMOIZADO → menos renders en toda la app
+    // =====================================================
+    const value = useMemo(
+        () => ({
+            user,
+            loading,
+            register,
+            login,
+            loginWithGoogle,
+            logout,
+        }),
+        [user, loading]
+    );
+
     return (
-        <AuthContext.Provider
-            value={{
-                user,
-                loading,
-                register,
-                login,
-                loginWithGoogle,
-                logout,
-            }}
-        >
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

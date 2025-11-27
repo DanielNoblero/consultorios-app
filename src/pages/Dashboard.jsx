@@ -1,3 +1,4 @@
+// src/pages/Dashboard.jsx
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseConfig";
@@ -7,22 +8,121 @@ import {
     where,
     onSnapshot,
     doc,
-    deleteDoc,
     getDoc,
-    getDocs
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { getMonday, getSunday } from "../utils/reservasUtils";
-import { eliminarReserva } from "../utils/reservasUtils";
+import { getMonday, getSunday, eliminarReserva } from "../utils/reservasUtils";
 import ModalRecurrente from "../components/ModalRecurrente";
 
 const CONFIG_DOC_ID = "precioConsulta";
 
+// ────────────────────────────────────────────────
+// COMPONENTES AUXILIARES (mismo diseño que antes)
+// ────────────────────────────────────────────────
+const Notification = ({ tipo, mensaje }) => (
+    <div
+        className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-2xl text-white font-semibold transition-all duration-300 ease-out ${
+            tipo === "success" ? "bg-green-500" : "bg-red-500"
+        }`}
+    >
+        {mensaje}
+    </div>
+);
+
+const CancelarModal = ({ isOpen, onClose, onConfirm, reserva }) => {
+    if (!isOpen || !reserva) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                <h3 className="text-2xl font-extrabold mb-3 text-red-600 border-b pb-2">
+                    ⚠️ Confirmar Cancelación
+                </h3>
+                <p className="text-gray-700 mb-4">
+                    ¿Estás seguro de que deseas cancelar la siguiente reserva?
+                </p>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-sm font-medium">
+                    <p>
+                        🗓 Consultorio {reserva.consultorio}: {reserva.fecha}
+                    </p>
+                    <p>
+                        🕒 Horario: {reserva.horaInicio} - {reserva.horaFin}
+                    </p>
+                    <p className="mt-1">
+                        Costo: ${reserva.precio.toFixed(2)}
+                    </p>
+                </div>
+                <p className="mt-3 text-sm text-red-700 font-semibold">
+                    Solo se permiten cancelaciones con más de 24 horas de
+                    antelación.
+                </p>
+                <div className="flex justify-end mt-6 gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition font-medium"
+                    >
+                        No, volver
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold shadow-md"
+                    >
+                        Sí, cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const DeudaCards = ({ totalSemana, totalMes }) => (
+    <section className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-sky-100 p-4 flex flex-col gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">
+                Deuda de esta semana
+            </span>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                ${totalSemana.toFixed(2)}
+            </p>
+            <p className="text-xs text-slate-500">
+                Suma de todas las consultas no pagas dentro de la semana
+                actual.
+            </p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 p-4 flex flex-col gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                Deuda del mes
+            </span>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                ${totalMes.toFixed(2)}
+            </p>
+            <p className="text-xs text-slate-500">
+                Incluye todas las reservas pendientes de pago del mes.
+            </p>
+        </div>
+    </section>
+);
+
+// ────────────────────────────────────────────────
+// DASHBOARD
+// ────────────────────────────────────────────────
 const Dashboard = () => {
     const meses = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        "Enero",
+        "Febrero",
+        "Marzo",
+        "Abril",
+        "Mayo",
+        "Junio",
+        "Julio",
+        "Agosto",
+        "Septiembre",
+        "Octubre",
+        "Noviembre",
+        "Diciembre",
     ];
+
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
@@ -30,24 +130,23 @@ const Dashboard = () => {
     const [precioGlobal, setPrecioGlobal] = useState(null);
     const [totalSemana, setTotalSemana] = useState(0);
     const [totalMes, setTotalMes] = useState(0);
+
     const [reservaACancelar, setReservaACancelar] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
     const [notificacion, setNotificacion] = useState(null);
-    const [userData, setUserData] = useState(null);
 
     const [mostrarSemana, setMostrarSemana] = useState(true);
     const [mostrarPasadas, setMostrarPasadas] = useState(false);
+
     const [nombreMesActual, setNombreMesActual] = useState("");
     const [nombreMesSiguiente, setNombreMesSiguiente] = useState("");
-    // 🆕 FILTRO semana/mes
-    const [vista, setVista] = useState("semana");
 
-    // 🆕 Vista completa del mes agrupada por semanas
+    const [vista, setVista] = useState("semana");
     const [reservasMes, setReservasMes] = useState({ semanas: {}, plano: [] });
     const [totalMesVista, setTotalMesVista] = useState(0);
     const [reservasMesSiguiente, setReservasMesSiguiente] = useState([]);
 
-    // 🆕 Modal eliminar serie
     const [modalRecurrente, setModalRecurrente] = useState(null);
 
     const capitalize = (str) => {
@@ -55,25 +154,15 @@ const Dashboard = () => {
         return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
     };
 
-    // 🔹 Cargar datos del usuario en tiempo real
-    useEffect(() => {
-        if (!user?.uid) return;
-
-        const ref = doc(db, "usuarios", user.uid);
-        const unsubscribe = onSnapshot(ref, (snap) => {
-            setUserData(snap.exists() ? snap.data() : null);
-        });
-
-        return () => unsubscribe();
-    }, [user]);
-
-    // 🔹 Cargar precio global
+    // 🔹 Cargar precio global (1 sola vez)
     useEffect(() => {
         const fetchPrecio = async () => {
             try {
                 const snap = await getDoc(doc(db, "configuracion", CONFIG_DOC_ID));
                 setPrecioGlobal(
-                    snap.exists() ? parseFloat(snap.data().precioBase || 250) : 250
+                    snap.exists()
+                        ? parseFloat(snap.data().precioBase || 250)
+                        : 250
                 );
             } catch (error) {
                 console.error("Error cargando precio global:", error);
@@ -106,16 +195,22 @@ const Dashboard = () => {
             );
 
             setReservas(reservasArray);
+
             // ───────────────────────────────────────────────
             // CÁLCULO DEUDA SEMANAL
             // ───────────────────────────────────────────────
-            const lunesSemana = getMonday(new Date());
-            const domingoSemana = getSunday(new Date());
+            const hoySemana = new Date();
+            const lunesSemana = getMonday(hoySemana);
+            const domingoSemana = getSunday(hoySemana);
 
             const deudaSemana = reservasArray
                 .filter((r) => {
                     const fecha = new Date(`${r.fecha}T${r.horaInicio}`);
-                    return fecha >= lunesSemana && fecha <= domingoSemana && !r.pagado;
+                    return (
+                        fecha >= lunesSemana &&
+                        fecha <= domingoSemana &&
+                        !r.pagado
+                    );
                 })
                 .reduce((acc, r) => acc + Number(r.precio || 0), 0);
 
@@ -142,16 +237,13 @@ const Dashboard = () => {
             setTotalMes(deudaMes);
 
             // ───────────────────────────────────────────────
-            // MES ACTUAL
+            // MES ACTUAL / SIGUIENTE
             // ───────────────────────────────────────────────
             const hoy = new Date();
             const year = hoy.getFullYear();
             const month = hoy.getMonth();
 
-            // 🆕 Setear nombres del mes actual y siguiente
             setNombreMesActual(meses[month]);
-
-            // calcular nextMonth UNA sola vez
             const nextMonth = (month + 1) % 12;
             setNombreMesSiguiente(meses[nextMonth]);
 
@@ -164,15 +256,12 @@ const Dashboard = () => {
                 (acc, r) => acc + (r.precio || 0),
                 0
             );
-
             setTotalMesVista(total);
 
-            // semanas agrupadas
             const semanasAgrupadas = {};
             reservasMesActual.forEach((r) => {
                 const f = new Date(`${r.fecha}T00:00:00`);
                 const semana = Math.ceil(f.getDate() / 7);
-
                 if (!semanasAgrupadas[semana]) semanasAgrupadas[semana] = [];
                 semanasAgrupadas[semana].push(r);
             });
@@ -182,22 +271,18 @@ const Dashboard = () => {
                 plano: reservasMesActual,
             });
 
-            // ───────────────────────────────────────────────
-            // MES SIGUIENTE
-            // ───────────────────────────────────────────────
             const nextYear = month === 11 ? year + 1 : year;
-
             const reservasSiguiente = reservasArray.filter((r) => {
                 const f = new Date(`${r.fecha}T00:00:00`);
-                return f.getMonth() === nextMonth && f.getFullYear() === nextYear;
+                return (
+                    f.getMonth() === nextMonth && f.getFullYear() === nextYear
+                );
             });
-
             setReservasMesSiguiente(reservasSiguiente);
         });
 
         return () => unsubscribe();
     }, [user, precioGlobal]);
-
 
     const handleConfirmCancel = (reserva) => {
         setReservaACancelar(reserva);
@@ -210,13 +295,17 @@ const Dashboard = () => {
     };
 
     const handleCancelar = async () => {
-        if (!reservaACancelar) return setIsModalOpen(false);
+        if (!reservaACancelar) {
+            setIsModalOpen(false);
+            return;
+        }
 
         const ahora = new Date();
         const fechaReserva = new Date(
             `${reservaACancelar.fecha}T${reservaACancelar.horaInicio}`
         );
-        const diferenciaHoras = (fechaReserva - ahora) / (1000 * 60 * 60);
+        const diferenciaHoras =
+            (fechaReserva - ahora) / (1000 * 60 * 60);
 
         setIsModalOpen(false);
 
@@ -230,12 +319,18 @@ const Dashboard = () => {
         }
 
         try {
-            await deleteDoc(doc(db, "reservas", reservaACancelar.id));
-            mostrarNotificacion("success", "✅ Reserva cancelada correctamente.");
+            await eliminarReserva(reservaACancelar, false);
+            mostrarNotificacion(
+                "success",
+                "✅ Reserva cancelada correctamente."
+            );
             setReservaACancelar(null);
         } catch (error) {
             console.error(error);
-            mostrarNotificacion("error", "❌ Ocurrió un error al cancelar la reserva.");
+            mostrarNotificacion(
+                "error",
+                "❌ Ocurrió un error al cancelar la reserva."
+            );
         }
     };
 
@@ -252,14 +347,15 @@ const Dashboard = () => {
         (r) => new Date(`${r.fecha}T${r.horaInicio}`) < ahora
     );
 
+    // Tomamos datos directamente de user (AuthContext ya mezcla Firestore)
     const nombreUsuario = capitalize(
-        userData?.nombre || user?.displayName?.split(" ")[0] || "Usuario"
+        user?.nombre || user?.displayName?.split(" ")[0] || "Usuario"
     );
 
     const apellidoUsuario = capitalize(
-        userData?.apellido ||
-        user?.displayName?.split(" ").slice(1).join(" ") ||
-        ""
+        user?.apellido ||
+            user?.displayName?.split(" ").slice(1).join(" ") ||
+            ""
     );
 
     const nombreCompleto = `${nombreUsuario} ${apellidoUsuario}`.trim();
@@ -267,20 +363,16 @@ const Dashboard = () => {
     const iniciales =
         (nombreUsuario?.[0] || "U") + (apellidoUsuario?.[0] || "");
 
-    // ---- UI (NO MODIFIQUÉ NADA DE TU CSS) ----
-    const Notification = ({ tipo, mensaje }) => (
-        <div
-            className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-2xl text-white font-semibold transition-all duration-300 ease-out ${tipo === "success" ? "bg-green-500" : "bg-red-500"
-                }`}
-        >
-            {mensaje}
-        </div>
-    );
+    const esAdmin = user?.rol === "admin" || user?.isAdmin;
+
     const eliminarSoloUna = async () => {
         try {
-            await deleteDoc(doc(db, "reservas", modalRecurrente.id));
+            await eliminarReserva(modalRecurrente, false);
             setModalRecurrente(null);
-            mostrarNotificacion("success", "Reserva eliminada correctamente.");
+            mostrarNotificacion(
+                "success",
+                "Reserva eliminada correctamente."
+            );
         } catch (e) {
             console.error(e);
             mostrarNotificacion("error", "Error al eliminar la reserva.");
@@ -289,120 +381,34 @@ const Dashboard = () => {
 
     const eliminarTodaLaSerie = async () => {
         try {
-            const q = query(
-                collection(db, "reservas"),
-                where("groupId", "==", modalRecurrente.groupId),
-                where("psicologoId", "==", user.uid)
-            );
-
-            const snap = await getDocs(q);
-
-            const eliminaciones = snap.docs.map((d) =>
-                deleteDoc(doc(db, "reservas", d.id))
-            );
-            await Promise.all(eliminaciones);
-
+            await eliminarReserva(modalRecurrente, true);
             setModalRecurrente(null);
-            mostrarNotificacion("success", "Toda la serie recurrente fue eliminada.");
+            mostrarNotificacion(
+                "success",
+                "Toda la serie recurrente fue eliminada."
+            );
         } catch (e) {
             console.error(e);
             mostrarNotificacion("error", "Error al eliminar la serie.");
         }
     };
 
-
-    const Modal = ({ isOpen, onClose, onConfirm, reserva }) => {
-        if (!isOpen || !reserva) return null;
-
-        return (
-            <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-                    <h3 className="text-2xl font-extrabold mb-3 text-red-600 border-b pb-2">
-                        ⚠️ Confirmar Cancelación
-                    </h3>
-                    <p className="text-gray-700 mb-4">
-                        ¿Estás seguro de que deseas cancelar la siguiente reserva?
-                    </p>
-                    <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-sm font-medium">
-                        <p>
-                            🗓 Consultorio {reserva.consultorio}: {reserva.fecha}
-                        </p>
-                        <p>
-                            🕒 Horario: {reserva.horaInicio} - {reserva.horaFin}
-                        </p>
-                        <p className="mt-1">
-                            Costo: ${reserva.precio.toFixed(2)}
-                        </p>
-                    </div>
-                    <p className="mt-3 text-sm text-red-700 font-semibold">
-                        Solo se permiten cancelaciones con más de 24 horas de antelación.
-                    </p>
-                    <div className="flex justify-end mt-6 gap-3">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition font-medium"
-                        >
-                            No, volver
-                        </button>
-                        <button
-                            onClick={onConfirm}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold shadow-md"
-                        >
-                            Sí, cancelar
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    const DeudaCards = () => (
-        <section className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl shadow-lg border border-sky-100 p-4 flex flex-col gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">
-                    Deuda de esta semana
-                </span>
-                <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                    ${totalSemana.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-500">
-                    Suma de todas las consultas no pagas dentro de la semana actual.
-                </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 p-4 flex flex-col gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-                    Deuda del mes
-                </span>
-                <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                    ${totalMes.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-500">
-                    Incluye todas las reservas pendientes de pago del mes.
-                </p>
-            </div>
-        </section>
-    );
-
-    const esAdmin = userData?.rol === "admin";
-
     const ReservaItem = ({ r }) => {
         const fechaReserva = new Date(`${r.fecha}T${r.horaInicio}`);
         const puedeCancelar =
             fechaReserva - ahora >= 24 * 60 * 60 * 1000; // 24h
 
-        // 🔹 Estado de pago — oculto si es admin
         const estadoPago = esAdmin
             ? null
             : r.pagado ? (
-                <span className="text-emerald-600 font-semibold flex items-center gap-1">
-                    Pagado ✅
-                </span>
-            ) : (
-                <span className="text-amber-700 font-semibold flex items-center gap-1">
-                    Pendiente de pago ⚠️
-                </span>
-            );
+                  <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                      Pagado ✅
+                  </span>
+              ) : (
+                  <span className="text-amber-700 font-semibold flex items-center gap-1">
+                      Pendiente de pago ⚠️
+                  </span>
+              );
 
         const baseClass =
             "flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 rounded-xl border shadow-sm transition duration-200 ease-in-out";
@@ -414,7 +420,9 @@ const Dashboard = () => {
         return (
             <li
                 key={r.id}
-                className={`${baseClass} ${fechaReserva >= ahora ? futureClass : pastClass}`}
+                className={`${baseClass} ${
+                    fechaReserva >= ahora ? futureClass : pastClass
+                }`}
             >
                 <div className="text-sm sm:text-base space-y-1">
                     <p className="font-semibold text-slate-900">
@@ -434,9 +442,9 @@ const Dashboard = () => {
                     <button
                         onClick={() => {
                             if (r.groupId) {
-                                setModalRecurrente(r);   // abre modal recurrente
+                                setModalRecurrente(r);
                             } else {
-                                handleConfirmCancel(r);  // modal normal
+                                handleConfirmCancel(r);
                             }
                         }}
                         className="mt-3 sm:mt-0 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-md text-sm font-semibold"
@@ -450,7 +458,6 @@ const Dashboard = () => {
 
     // ------------------- UI PRINCIPAL -------------------
     return (
-
         <div className="min-h-screen bg-slate-50 pt-24 pb-10 px-4">
             {notificacion && <Notification {...notificacion} />}
 
@@ -464,7 +471,8 @@ const Dashboard = () => {
                             Hola, {nombreCompleto}
                         </h1>
                         <p className="text-sm sm:text-base text-slate-600 mt-2">
-                            Aquí puedes ver tus próximas reservas, historial y deudas pendientes.
+                            Aquí puedes ver tus próximas reservas, historial y
+                            deudas pendientes.
                         </p>
                     </div>
 
@@ -476,44 +484,48 @@ const Dashboard = () => {
                             <span className="text-sm font-semibold text-slate-800">
                                 {nombreCompleto}
                             </span>
-                            <span className="text-xs text-slate-500">Profesional activo</span>
+                            <span className="text-xs text-slate-500">
+                                Profesional activo
+                            </span>
                         </div>
                     </div>
                 </section>
 
-                <DeudaCards />
+                <DeudaCards totalSemana={totalSemana} totalMes={totalMes} />
 
                 <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-sky-100 p-6">
-
                         {/* BOTONES SEMANA/MES */}
                         <div className="flex gap-3 mb-4">
                             <button
                                 onClick={() => setVista("semana")}
-                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "semana"
-                                    ? "bg-sky-600 text-white shadow"
-                                    : "bg-white border border-sky-300 text-sky-700"
-                                    }`}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    vista === "semana"
+                                        ? "bg-sky-600 text-white shadow"
+                                        : "bg-white border border-sky-300 text-sky-700"
+                                }`}
                             >
                                 Semana actual
                             </button>
 
                             <button
                                 onClick={() => setVista("mes")}
-                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "mes"
-                                    ? "bg-sky-600 text-white shadow"
-                                    : "bg-white border border-sky-300 text-sky-700"
-                                    }`}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    vista === "mes"
+                                        ? "bg-sky-600 text-white shadow"
+                                        : "bg-white border border-sky-300 text-sky-700"
+                                }`}
                             >
                                 Mes actual
                             </button>
 
                             <button
                                 onClick={() => setVista("mesSiguiente")}
-                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "mesSiguiente"
-                                    ? "bg-sky-600 text-white shadow"
-                                    : "bg-white border border-sky-300 text-sky-700"
-                                    }`}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    vista === "mesSiguiente"
+                                        ? "bg-sky-600 text-white shadow"
+                                        : "bg-white border border-sky-300 text-sky-700"
+                                }`}
                             >
                                 Mes siguiente
                             </button>
@@ -522,25 +534,24 @@ const Dashboard = () => {
                         {/* TÍTULO */}
                         <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
                             <h2 className="text-xl sm:text-2xl font-bold text-sky-800">
-
                                 {vista === "semana" && "Próximas reservas"}
-
-                                {vista === "mes" && `Próximas reservas — ${nombreMesActual}`}
-
-                                {vista === "mesSiguiente" && `Próximas reservas — ${nombreMesSiguiente}`}
-
-                                {" "}
+                                {vista === "mes" &&
+                                    `Próximas reservas — ${nombreMesActual}`}
+                                {vista === "mesSiguiente" &&
+                                    `Próximas reservas — ${nombreMesSiguiente}`}{" "}
                                 (
                                 {vista === "semana"
                                     ? reservasSemanaMostrar.length
                                     : vista === "mes"
-                                        ? reservasMes.plano.length
-                                        : reservasMesSiguiente.length}
+                                    ? reservasMes.plano.length
+                                    : reservasMesSiguiente.length}
                                 )
                             </h2>
 
                             <button
-                                onClick={() => setMostrarSemana(!mostrarSemana)}
+                                onClick={() =>
+                                    setMostrarSemana(!mostrarSemana)
+                                }
                                 className="text-xs sm:text-sm font-semibold text-sky-600 hover:text-sky-800"
                             >
                                 {mostrarSemana ? "Contraer ▲" : "Extender ▼"}
@@ -553,7 +564,9 @@ const Dashboard = () => {
                                 <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
                                     🎉 No tienes reservas esta semana.{" "}
                                     <button
-                                        onClick={() => navigate("/reservas")}
+                                        onClick={() =>
+                                            navigate("/reservas")
+                                        }
                                         className="font-semibold underline hover:text-sky-900"
                                     >
                                         Agendar una ahora
@@ -575,16 +588,20 @@ const Dashboard = () => {
                                 {reservasMes.plano.map((r) => (
                                     <ReservaItem key={r.id} r={r} />
                                 ))}
-                                <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
-                                    🎉 No tienes reservas esta semana.{" "}
-                                    <button
-                                        onClick={() => navigate("/reservas")}
-                                        className="font-semibold underline hover:text-sky-900"
-                                    >
-                                        Agendar una ahora
-                                    </button>
-                                    .
-                                </div>
+                                {reservasMes.plano.length === 0 && (
+                                    <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
+                                        🎉 No tienes reservas este mes.{" "}
+                                        <button
+                                            onClick={() =>
+                                                navigate("/reservas")
+                                            }
+                                            className="font-semibold underline hover:text-sky-900"
+                                        >
+                                            Agendar una ahora
+                                        </button>
+                                        .
+                                    </div>
+                                )}
                             </ul>
                         )}
 
@@ -593,16 +610,20 @@ const Dashboard = () => {
                                 {reservasMesSiguiente.map((r) => (
                                     <ReservaItem key={r.id} r={r} />
                                 ))}
-                                <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
-                                    🎉 No tienes reservas esta semana.{" "}
-                                    <button
-                                        onClick={() => navigate("/reservas")}
-                                        className="font-semibold underline hover:text-sky-900"
-                                    >
-                                        Agendar una ahora
-                                    </button>
-                                    .
-                                </div>
+                                {reservasMesSiguiente.length === 0 && (
+                                    <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
+                                        🎉 No tienes reservas ese mes.{" "}
+                                        <button
+                                            onClick={() =>
+                                                navigate("/reservas")
+                                            }
+                                            className="font-semibold underline hover:text-sky-900"
+                                        >
+                                            Agendar una ahora
+                                        </button>
+                                        .
+                                    </div>
+                                )}
                             </ul>
                         )}
                     </div>
@@ -614,15 +635,19 @@ const Dashboard = () => {
                                 Historial ({reservasPasadas.length})
                             </h2>
                             <button
-                                onClick={() => setMostrarPasadas(!mostrarPasadas)}
+                                onClick={() =>
+                                    setMostrarPasadas(!mostrarPasadas)
+                                }
                                 className="text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-800"
                             >
-                                {mostrarPasadas ? "Contraer ▲" : "Extender ▼"}
+                                {mostrarPasadas
+                                    ? "Contraer ▲"
+                                    : "Extender ▼"}
                             </button>
                         </div>
 
-                        {mostrarPasadas && (
-                            reservasPasadas.length === 0 ? (
+                        {mostrarPasadas &&
+                            (reservasPasadas.length === 0 ? (
                                 <p className="text-sm sm:text-base text-slate-500">
                                     Aún no tienes reservas en tu historial.
                                 </p>
@@ -632,8 +657,7 @@ const Dashboard = () => {
                                         <ReservaItem key={r.id} r={r} />
                                     ))}
                                 </ul>
-                            )
-                        )}
+                            ))}
                     </div>
                 </section>
 
@@ -654,12 +678,13 @@ const Dashboard = () => {
                 </section>
             </main>
 
-            <Modal
+            <CancelarModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={handleCancelar}
                 reserva={reservaACancelar}
             />
+
             <ModalRecurrente
                 isOpen={!!modalRecurrente}
                 onClose={() => setModalRecurrente(null)}

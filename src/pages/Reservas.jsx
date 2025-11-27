@@ -1,4 +1,3 @@
-// src/pages/Reservas.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getISOWeek } from "date-fns";
@@ -18,31 +17,37 @@ const Reservas = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    // Fecha seleccionada — siempre comienza en HOY
+    // Fecha actual sin hora
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
     const [consultorio, setConsultorio] = useState("1");
     const [reservasExistentes, setReservasExistentes] = useState([]);
+
     const [precioBase, setPrecioBase] = useState(250);
 
+    // Modales
     const [isReservaModalOpen, setIsReservaModalOpen] = useState(false);
     const [reservaAConfirmar, setReservaAConfirmar] = useState(null);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [reservaACancelar, setReservaACancelar] = useState(null);
 
+    // Notificaciones
     const [notification, setNotification] = useState({
         isOpen: false,
         type: "info",
         title: "",
         message: "",
     });
+
+    // Estados del modal recurrente (Opción D)
     const [tipoReserva, setTipoReserva] = useState("Ocasional");
     const [recurrenciaTipo, setRecurrenciaTipo] = useState("Semanal");
     const [recurrenciaCantidad, setRecurrenciaCantidad] = useState(1);
-    // UI local
+
+    // Lista del usuario
     const [misReservas, setMisReservas] = useState([]);
     const [expandOcasionales, setExpandOcasionales] = useState(false);
 
@@ -68,7 +73,7 @@ const Reservas = () => {
     }, [cargarPrecioBase]);
 
     // ---------------------------------------------------
-    // RESERVAS (DÍA — otros usuarios)
+    // CARGAR RESERVAS DEL DÍA
     // ---------------------------------------------------
     const cargarReservas = useCallback(async () => {
         if (!fechaSeleccionada) return;
@@ -76,7 +81,7 @@ const Reservas = () => {
         const fechaSinHora = new Date(fechaSeleccionada);
         fechaSinHora.setHours(0, 0, 0, 0);
 
-        // Día pasado → no mostramos nada
+        // Día pasado → bloquear todo
         if (fechaSinHora < hoy) {
             setReservasExistentes([]);
             return;
@@ -85,8 +90,7 @@ const Reservas = () => {
         const data = await traerReservas(
             fechaSeleccionada,
             consultorio,
-            getIniciales,
-            showNotification
+            getIniciales
         );
 
         setReservasExistentes(data);
@@ -97,12 +101,13 @@ const Reservas = () => {
     }, [cargarReservas, user, fechaSeleccionada]);
 
     // ---------------------------------------------------
-    // MIS RESERVAS
+    // CARGAR MIS RESERVAS
     // ---------------------------------------------------
     useEffect(() => {
         const cargarMisReservas = async () => {
             if (!user?.uid) return;
             const data = await traerReservasUsuario(user.uid);
+
             const ordenadas = [...data].sort(
                 (a, b) =>
                     new Date(`${a.fecha}T${a.horaInicio}`) -
@@ -114,9 +119,8 @@ const Reservas = () => {
     }, [user]);
 
     // ---------------------------------------------------
-    // UTILIDADES DE FECHA / HORA
+    // UTILIDADES
     // ---------------------------------------------------
-    // 🔥 IMPORTANTE: fecha local, sin toISOString (evitamos problemas de zona horaria)
     const getFechaStr = (fecha) => {
         const year = fecha.getFullYear();
         const month = String(fecha.getMonth() + 1).padStart(2, "0");
@@ -126,54 +130,44 @@ const Reservas = () => {
 
     const toLocalDateTime = (fecha, hora) => {
         const [year, month, day] = fecha.split("-");
-        const [hh, mm] = hora.split(":");
-        return new Date(year, month - 1, day, hh, mm, 0, 0);
+        const [h, m] = hora.split(":");
+        return new Date(year, month - 1, day, h, m, 0, 0);
     };
 
     // ---------------------------------------------------
-    // LÓGICA HORARIOS
+    // LÓGICA DE HORARIOS
     // ---------------------------------------------------
     const estaOcupado = (horaInicio) => {
         const horario = horarios.find((h) => h.inicio === horaInicio);
         if (!horario) return null;
 
-        const fecha = getFechaStr(fechaSeleccionada);
+        const fechaStr = getFechaStr(fechaSeleccionada);
 
-        // Convertir a Date reales
-        const intentoInicio = toLocalDateTime(fecha, horario.inicio);
-        const intentoFin = toLocalDateTime(fecha, horario.fin);
+        const inicio = toLocalDateTime(fechaStr, horario.inicio);
+        const fin = toLocalDateTime(fechaStr, horario.fin);
 
-        const ahora = new Date(); // se evalúa en cada render
+        const ahora = new Date();
         const hoyStr = getFechaStr(ahora);
 
-        const fechaSel = new Date(fecha + "T00:00:00");
+        const fechaSel = new Date(fechaStr + "T00:00:00");
 
-        // 1) Día en el pasado → bloquear todo
-        const hoyLocal = new Date();
-        hoyLocal.setHours(0, 0, 0, 0);
+        // 1) Día pasado → bloquea todo
+        if (fechaSel < hoy) return { iniciales: "PASADA" };
 
-        if (fechaSel < hoyLocal) {
+        // 2) Mismo día → bloquear horarios anteriores al “ahora real”
+        if (fechaStr === hoyStr && inicio.getTime() <= ahora.getTime()) {
             return { iniciales: "PASADA" };
         }
 
-        // 2) Mismo día → bloquear horarios anteriores o iguales a la hora actual
-        if (fecha === hoyStr && intentoInicio.getTime() <= ahora.getTime()) {
-            return { iniciales: "PASADA" };
-        }
-
-        // 3) No permitir terminar después de las 22:00
-        if (
-            intentoFin.getHours() > 22 ||
-            (intentoFin.getHours() === 22 && intentoFin.getMinutes() > 0)
-        ) {
+        // 3) No permitir pasar de 22:00
+        if (fin.getHours() > 22 || (fin.getHours() === 22 && fin.getMinutes() > 0))
             return { iniciales: "REGLA" };
-        }
 
-        // 4) Chequear conflictos reales con Firestore
+        // 4) Conflictos reales
         return reservasExistentes.find((r) => {
             const rInicio = toLocalDateTime(r.fecha, r.horaInicio);
             const rFin = toLocalDateTime(r.fecha, r.horaFin);
-            return intentoInicio < rFin && rInicio < intentoFin;
+            return inicio < rFin && rInicio < fin;
         });
     };
 
@@ -184,21 +178,16 @@ const Reservas = () => {
         const fechaSinHora = new Date(fechaSeleccionada);
         fechaSinHora.setHours(0, 0, 0, 0);
 
-        // NO PERMITIR RESERVAR EN DÍAS PASADOS
         if (fechaSinHora < hoy) {
-            showNotification(
-                "error",
-                "Día no permitido",
-                "No se pueden realizar reservas en días pasados."
-            );
+            showNotification("error", "Día no permitido", "No puedes reservar en días pasados.");
             return;
         }
 
         const ocupado = estaOcupado(horaInicio);
         if (ocupado) {
             const mensajes = {
-                REGLA: "La reserva no puede finalizar después de las 22:00.",
-                PASADA: "Ese horario no está disponible.",
+                PASADA: "Ese horario ya pasó.",
+                REGLA: "La reserva no puede terminar después de las 22:00.",
                 default: `Horario ocupado por ${ocupado.iniciales}.`,
             };
 
@@ -210,11 +199,11 @@ const Reservas = () => {
             return;
         }
 
-        const fechaStr = getFechaStr(fechaSeleccionada);
+        const fecha = getFechaStr(fechaSeleccionada);
         const horario = horarios.find((h) => h.inicio === horaInicio);
 
         setReservaAConfirmar({
-            fecha: fechaStr,
+            fecha,
             horaInicio: horario.inicio,
             horaFin: horario.fin,
             consultorio,
@@ -225,13 +214,16 @@ const Reservas = () => {
     };
 
     // ---------------------------------------------------
-    // FILTRA RESERVAS → semana actual
+    // RESERVAS SEMANA ACTUAL
     // ---------------------------------------------------
     const semanaActual = getISOWeek(new Date());
     const reservasSemana = misReservas.filter(
         (r) => getISOWeek(new Date(r.fecha)) === semanaActual
     );
 
+    // ---------------------------------------------------
+    // RENDER
+    // ---------------------------------------------------
     return (
         <div className="flex flex-col items-center min-h-screen bg-gray-50 pt-24 p-4">
             <div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 mb-10">
@@ -281,8 +273,7 @@ const Reservas = () => {
                 {fechaSeleccionada && (
                     <div className="mt-10">
                         <h3 className="text-xl font-bold mb-4 border-b pb-2">
-                            Horarios Disponibles —{" "}
-                            {fechaSeleccionada.toLocaleDateString("es-ES")}
+                            Horarios Disponibles — {fechaSeleccionada.toLocaleDateString("es-ES")}
                         </h3>
 
                         <div className="flex flex-col gap-3">
@@ -345,13 +336,9 @@ const Reservas = () => {
                     {expandOcasionales ? (
                         <div className="space-y-3 animate-slideDown">
                             {reservasSemana.map((r) => {
-                                const fechaReserva = toLocalDateTime(
-                                    r.fecha,
-                                    r.horaInicio
-                                );
+                                const fechaReserva = toLocalDateTime(r.fecha, r.horaInicio);
                                 const ahora = new Date();
-                                const puedeCancelar =
-                                    fechaReserva - ahora > 24 * 60 * 60 * 1000;
+                                const puedeCancelar = fechaReserva - ahora > 24 * 60 * 60 * 1000;
 
                                 return (
                                     <div
@@ -427,6 +414,7 @@ const Reservas = () => {
                     }}
                 />
             )}
+
             {isModalOpen && (
                 <CancelarReservaModal
                     reserva={reservaACancelar}
