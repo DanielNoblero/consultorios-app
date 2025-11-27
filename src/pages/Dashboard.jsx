@@ -9,13 +9,20 @@ import {
     doc,
     deleteDoc,
     getDoc,
+    getDocs
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { getMonday, getSunday } from "../utils/reservasUtils";
+import { eliminarReserva } from "../utils/reservasUtils";
+import ModalRecurrente from "../components/ModalRecurrente";
 
 const CONFIG_DOC_ID = "precioConsulta";
 
 const Dashboard = () => {
+    const meses = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
@@ -30,6 +37,18 @@ const Dashboard = () => {
 
     const [mostrarSemana, setMostrarSemana] = useState(true);
     const [mostrarPasadas, setMostrarPasadas] = useState(false);
+    const [nombreMesActual, setNombreMesActual] = useState("");
+    const [nombreMesSiguiente, setNombreMesSiguiente] = useState("");
+    // 🆕 FILTRO semana/mes
+    const [vista, setVista] = useState("semana");
+
+    // 🆕 Vista completa del mes agrupada por semanas
+    const [reservasMes, setReservasMes] = useState({ semanas: {}, plano: [] });
+    const [totalMesVista, setTotalMesVista] = useState(0);
+    const [reservasMesSiguiente, setReservasMesSiguiente] = useState([]);
+
+    // 🆕 Modal eliminar serie
+    const [modalRecurrente, setModalRecurrente] = useState(null);
 
     const capitalize = (str) => {
         if (!str) return "";
@@ -70,7 +89,7 @@ const Dashboard = () => {
 
         const q = query(
             collection(db, "reservas"),
-            where("psicologoId", "==", user.uid)   // 👈 SOLO psicologoId
+            where("psicologoId", "==", user.uid)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -87,12 +106,98 @@ const Dashboard = () => {
             );
 
             setReservas(reservasArray);
+            // ───────────────────────────────────────────────
+            // CÁLCULO DEUDA SEMANAL
+            // ───────────────────────────────────────────────
+            const lunesSemana = getMonday(new Date());
+            const domingoSemana = getSunday(new Date());
 
-            // ... el resto de tu cálculo de totalSemana y totalMes queda igual
+            const deudaSemana = reservasArray
+                .filter((r) => {
+                    const fecha = new Date(`${r.fecha}T${r.horaInicio}`);
+                    return fecha >= lunesSemana && fecha <= domingoSemana && !r.pagado;
+                })
+                .reduce((acc, r) => acc + Number(r.precio || 0), 0);
+
+            setTotalSemana(deudaSemana);
+
+            // ───────────────────────────────────────────────
+            // CÁLCULO DEUDA MENSUAL
+            // ───────────────────────────────────────────────
+            const hoyCalc = new Date();
+            const mesCalc = hoyCalc.getMonth();
+            const añoCalc = hoyCalc.getFullYear();
+
+            const deudaMes = reservasArray
+                .filter((r) => {
+                    const fecha = new Date(`${r.fecha}T00:00:00`);
+                    return (
+                        fecha.getMonth() === mesCalc &&
+                        fecha.getFullYear() === añoCalc &&
+                        !r.pagado
+                    );
+                })
+                .reduce((acc, r) => acc + Number(r.precio || 0), 0);
+
+            setTotalMes(deudaMes);
+
+            // ───────────────────────────────────────────────
+            // MES ACTUAL
+            // ───────────────────────────────────────────────
+            const hoy = new Date();
+            const year = hoy.getFullYear();
+            const month = hoy.getMonth();
+
+            // 🆕 Setear nombres del mes actual y siguiente
+            setNombreMesActual(meses[month]);
+
+            // calcular nextMonth UNA sola vez
+            const nextMonth = (month + 1) % 12;
+            setNombreMesSiguiente(meses[nextMonth]);
+
+            const reservasMesActual = reservasArray.filter((r) => {
+                const f = new Date(`${r.fecha}T00:00:00`);
+                return f.getMonth() === month && f.getFullYear() === year;
+            });
+
+            const total = reservasMesActual.reduce(
+                (acc, r) => acc + (r.precio || 0),
+                0
+            );
+
+            setTotalMesVista(total);
+
+            // semanas agrupadas
+            const semanasAgrupadas = {};
+            reservasMesActual.forEach((r) => {
+                const f = new Date(`${r.fecha}T00:00:00`);
+                const semana = Math.ceil(f.getDate() / 7);
+
+                if (!semanasAgrupadas[semana]) semanasAgrupadas[semana] = [];
+                semanasAgrupadas[semana].push(r);
+            });
+
+            setReservasMes({
+                semanas: semanasAgrupadas,
+                plano: reservasMesActual,
+            });
+
+            // ───────────────────────────────────────────────
+            // MES SIGUIENTE
+            // ───────────────────────────────────────────────
+            const nextYear = month === 11 ? year + 1 : year;
+
+            const reservasSiguiente = reservasArray.filter((r) => {
+                const f = new Date(`${r.fecha}T00:00:00`);
+                return f.getMonth() === nextMonth && f.getFullYear() === nextYear;
+            });
+
+            setReservasMesSiguiente(reservasSiguiente);
         });
 
         return () => unsubscribe();
     }, [user, precioGlobal]);
+
 
     const handleConfirmCancel = (reserva) => {
         setReservaACancelar(reserva);
@@ -171,6 +276,40 @@ const Dashboard = () => {
             {mensaje}
         </div>
     );
+    const eliminarSoloUna = async () => {
+        try {
+            await deleteDoc(doc(db, "reservas", modalRecurrente.id));
+            setModalRecurrente(null);
+            mostrarNotificacion("success", "Reserva eliminada correctamente.");
+        } catch (e) {
+            console.error(e);
+            mostrarNotificacion("error", "Error al eliminar la reserva.");
+        }
+    };
+
+    const eliminarTodaLaSerie = async () => {
+        try {
+            const q = query(
+                collection(db, "reservas"),
+                where("groupId", "==", modalRecurrente.groupId),
+                where("psicologoId", "==", user.uid)
+            );
+
+            const snap = await getDocs(q);
+
+            const eliminaciones = snap.docs.map((d) =>
+                deleteDoc(doc(db, "reservas", d.id))
+            );
+            await Promise.all(eliminaciones);
+
+            setModalRecurrente(null);
+            mostrarNotificacion("success", "Toda la serie recurrente fue eliminada.");
+        } catch (e) {
+            console.error(e);
+            mostrarNotificacion("error", "Error al eliminar la serie.");
+        }
+    };
+
 
     const Modal = ({ isOpen, onClose, onConfirm, reserva }) => {
         if (!isOpen || !reserva) return null;
@@ -293,7 +432,13 @@ const Dashboard = () => {
 
                 {puedeCancelar && (
                     <button
-                        onClick={() => handleConfirmCancel(r)}
+                        onClick={() => {
+                            if (r.groupId) {
+                                setModalRecurrente(r);   // abre modal recurrente
+                            } else {
+                                handleConfirmCancel(r);  // modal normal
+                            }
+                        }}
                         className="mt-3 sm:mt-0 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition shadow-md text-sm font-semibold"
                     >
                         ❌ Cancelar
@@ -305,6 +450,7 @@ const Dashboard = () => {
 
     // ------------------- UI PRINCIPAL -------------------
     return (
+
         <div className="min-h-screen bg-slate-50 pt-24 pb-10 px-4">
             {notificacion && <Notification {...notificacion} />}
 
@@ -339,10 +485,60 @@ const Dashboard = () => {
 
                 <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-sky-100 p-6">
+
+                        {/* BOTONES SEMANA/MES */}
+                        <div className="flex gap-3 mb-4">
+                            <button
+                                onClick={() => setVista("semana")}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "semana"
+                                    ? "bg-sky-600 text-white shadow"
+                                    : "bg-white border border-sky-300 text-sky-700"
+                                    }`}
+                            >
+                                Semana actual
+                            </button>
+
+                            <button
+                                onClick={() => setVista("mes")}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "mes"
+                                    ? "bg-sky-600 text-white shadow"
+                                    : "bg-white border border-sky-300 text-sky-700"
+                                    }`}
+                            >
+                                Mes actual
+                            </button>
+
+                            <button
+                                onClick={() => setVista("mesSiguiente")}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "mesSiguiente"
+                                    ? "bg-sky-600 text-white shadow"
+                                    : "bg-white border border-sky-300 text-sky-700"
+                                    }`}
+                            >
+                                Mes siguiente
+                            </button>
+                        </div>
+
+                        {/* TÍTULO */}
                         <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
                             <h2 className="text-xl sm:text-2xl font-bold text-sky-800">
-                                Próximas reservas ({reservasSemanaMostrar.length})
+
+                                {vista === "semana" && "Próximas reservas"}
+
+                                {vista === "mes" && `Próximas reservas — ${nombreMesActual}`}
+
+                                {vista === "mesSiguiente" && `Próximas reservas — ${nombreMesSiguiente}`}
+
+                                {" "}
+                                (
+                                {vista === "semana"
+                                    ? reservasSemanaMostrar.length
+                                    : vista === "mes"
+                                        ? reservasMes.plano.length
+                                        : reservasMesSiguiente.length}
+                                )
                             </h2>
+
                             <button
                                 onClick={() => setMostrarSemana(!mostrarSemana)}
                                 className="text-xs sm:text-sm font-semibold text-sky-600 hover:text-sky-800"
@@ -351,30 +547,67 @@ const Dashboard = () => {
                             </button>
                         </div>
 
-                        {mostrarSemana && (
-                            <>
-                                {reservasSemanaMostrar.length === 0 ? (
-                                    <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
-                                        🎉 No tienes reservas esta semana.{" "}
-                                        <button
-                                            onClick={() => navigate("/reservas")}
-                                            className="font-semibold underline hover:text-sky-900"
-                                        >
-                                            Agendar una ahora
-                                        </button>
-                                        .
-                                    </div>
-                                ) : (
-                                    <ul className="space-y-4">
-                                        {reservasSemanaMostrar.map((r) => (
-                                            <ReservaItem key={r.id} r={r} />
-                                        ))}
-                                    </ul>
-                                )}
-                            </>
+                        {/* LISTA SEMANAL */}
+                        {vista === "semana" && mostrarSemana && (
+                            reservasSemanaMostrar.length === 0 ? (
+                                <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
+                                    🎉 No tienes reservas esta semana.{" "}
+                                    <button
+                                        onClick={() => navigate("/reservas")}
+                                        className="font-semibold underline hover:text-sky-900"
+                                    >
+                                        Agendar una ahora
+                                    </button>
+                                    .
+                                </div>
+                            ) : (
+                                <ul className="space-y-4">
+                                    {reservasSemanaMostrar.map((r) => (
+                                        <ReservaItem key={r.id} r={r} />
+                                    ))}
+                                </ul>
+                            )
+                        )}
+
+                        {/* LISTA MENSUAL */}
+                        {vista === "mes" && mostrarSemana && (
+                            <ul className="space-y-4">
+                                {reservasMes.plano.map((r) => (
+                                    <ReservaItem key={r.id} r={r} />
+                                ))}
+                                <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
+                                    🎉 No tienes reservas esta semana.{" "}
+                                    <button
+                                        onClick={() => navigate("/reservas")}
+                                        className="font-semibold underline hover:text-sky-900"
+                                    >
+                                        Agendar una ahora
+                                    </button>
+                                    .
+                                </div>
+                            </ul>
+                        )}
+
+                        {vista === "mesSiguiente" && mostrarSemana && (
+                            <ul className="space-y-4">
+                                {reservasMesSiguiente.map((r) => (
+                                    <ReservaItem key={r.id} r={r} />
+                                ))}
+                                <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
+                                    🎉 No tienes reservas esta semana.{" "}
+                                    <button
+                                        onClick={() => navigate("/reservas")}
+                                        className="font-semibold underline hover:text-sky-900"
+                                    >
+                                        Agendar una ahora
+                                    </button>
+                                    .
+                                </div>
+                            </ul>
                         )}
                     </div>
 
+                    {/* COLUMNA DERECHA - HISTORIAL */}
                     <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
                         <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
                             <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
@@ -389,19 +622,17 @@ const Dashboard = () => {
                         </div>
 
                         {mostrarPasadas && (
-                            <>
-                                {reservasPasadas.length === 0 ? (
-                                    <p className="text-sm sm:text-base text-slate-500">
-                                        Aún no tienes reservas en tu historial.
-                                    </p>
-                                ) : (
-                                    <ul className="space-y-3">
-                                        {reservasPasadas.map((r) => (
-                                            <ReservaItem key={r.id} r={r} />
-                                        ))}
-                                    </ul>
-                                )}
-                            </>
+                            reservasPasadas.length === 0 ? (
+                                <p className="text-sm sm:text-base text-slate-500">
+                                    Aún no tienes reservas en tu historial.
+                                </p>
+                            ) : (
+                                <ul className="space-y-3">
+                                    {reservasPasadas.map((r) => (
+                                        <ReservaItem key={r.id} r={r} />
+                                    ))}
+                                </ul>
+                            )
                         )}
                     </div>
                 </section>
@@ -413,6 +644,7 @@ const Dashboard = () => {
                     >
                         Agendar nueva reserva
                     </button>
+
                     <button
                         onClick={logout}
                         className="flex-1 bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 transition shadow-lg font-semibold text-base sm:text-lg flex items-center justify-center gap-2"
@@ -427,6 +659,13 @@ const Dashboard = () => {
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={handleCancelar}
                 reserva={reservaACancelar}
+            />
+            <ModalRecurrente
+                isOpen={!!modalRecurrente}
+                onClose={() => setModalRecurrente(null)}
+                onEliminarUna={eliminarSoloUna}
+                onEliminarTodas={eliminarTodaLaSerie}
+                reserva={modalRecurrente}
             />
         </div>
     );

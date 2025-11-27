@@ -14,8 +14,9 @@ import {
     getDoc,
     addDoc,
     updateDoc,
+    deleteDoc
 } from "firebase/firestore";
-
+import { v4 as uuidv4 } from "uuid";
 // =====================================================
 // PRECIOS CONFIGURADOS
 // =====================================================
@@ -198,6 +199,8 @@ export const confirmarReserva = async ({
                         : recurrenciaCantidad
                 : 1;
 
+        const groupId = tipoReserva === "Recurrente" ? uuidv4() : null;
+
         const nuevas = [];
 
         for (let i = 0; i < total; i++) {
@@ -223,6 +226,7 @@ export const confirmarReserva = async ({
                         : `Recurrente ${recurrenciaTipo}`,
                 precio: null,
                 pagado: false,
+                groupId: groupId,
             });
         }
 
@@ -278,5 +282,39 @@ export const confirmarReserva = async ({
         );
     } catch (error) {
         console.error("ERROR confirmando reserva:", error);
+    }
+};
+// =====================================================
+// ELIMINAR RESERVAS (UNA O TODA LA SERIE)
+// =====================================================
+export const eliminarReserva = async (reserva, eliminarSerie = false) => {
+    if (!reserva) return;
+
+    try {
+        // Si no es recurrente → borrar solo una
+        if (!reserva.groupId || !eliminarSerie) {
+            await deleteDoc(doc(db, "reservas", reserva.id));
+            return { ok: true, tipo: "una" };
+        }
+
+        // 🔥 Si es recurrente y quiere borrar TODA la serie
+        const q = query(
+            collection(db, "reservas"),
+            where("groupId", "==", reserva.groupId)
+        );
+
+        const snap = await getDocs(q);
+
+        const batchDeletes = snap.docs.map((d) =>
+            deleteDoc(doc(db, "reservas", d.id))
+        );
+
+        await Promise.all(batchDeletes);
+
+        return { ok: true, tipo: "serie" };
+
+    } catch (error) {
+        console.error("Error eliminando reserva(s):", error);
+        return { ok: false, error };
     }
 };

@@ -6,7 +6,6 @@ export default function Calendar({
     fechaSeleccionada,
     setFechaSeleccionada,
     reservasExistentes,
-    estaOcupado,
 }) {
     const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -17,7 +16,6 @@ export default function Calendar({
 
         let firstDay = new Date(year, month, 1).getDay();
         firstDay = (firstDay === 0 ? 6 : firstDay - 1);
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         const weeks = [];
         let day = 1 - firstDay;
@@ -43,19 +41,35 @@ export default function Calendar({
     const isToday = (date) => isSameDay(date, new Date());
 
     const handlePrevMonth = () => {
-        setCurrentMonth(
-            new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-        );
+        const nuevo = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+        setCurrentMonth(nuevo);
+
+        // 🔥 Si fechaSeleccionada quedó en un mes pasado → volver a hoy
+        const f = new Date(fechaSeleccionada);
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        if (f < hoy) {
+            setFechaSeleccionada(new Date());
+        }
     };
 
     const handleNextMonth = () => {
-        setCurrentMonth(
-            new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
-        );
+        const nuevo = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+        setCurrentMonth(nuevo);
+
+        const f = new Date(fechaSeleccionada);
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        if (f < hoy) {
+            setFechaSeleccionada(new Date());
+        }
     };
 
     return (
         <div className="w-full bg-white p-4 rounded-xl shadow-md border">
+
             {/* Header */}
             <div className="flex justify-between items-center mb-4">
                 <button
@@ -94,20 +108,19 @@ export default function Calendar({
                         const isCurrentMonth =
                             day.getMonth() === currentMonth.getMonth();
 
-                        const disabled =
-                            day < new Date().setHours(0, 0, 0, 0);
+                        const hoy = new Date();
+                        hoy.setHours(0, 0, 0, 0);
+                        const disabled = day < hoy;  // 🔥 OPCIÓN A: días pasados bloqueados
 
                         const isSelected =
-                            fechaSeleccionada &&
-                            isSameDay(day, fechaSeleccionada);
+                            fechaSeleccionada && isSameDay(day, fechaSeleccionada);
 
-                        // Marca si el día tiene reservas (basado en día)
-                        const tieneReservas = reservasExistentes.some(
-                            (r) =>
-                                r.fecha === day.toISOString().split("T")[0]
-                        );
+                        const fechaStr = day.toISOString().split("T")[0];
+                        const tieneReservas =
+                            reservasExistentes.length > 0 &&
+                            reservasExistentes.some((r) => r.fecha === fechaStr);
 
-                        // Clases
+                        // Clases visuales (NO TOCO TU CSS)
                         const classes = `
                             p-2 rounded-lg text-sm font-semibold transition cursor-pointer
                             ${!isCurrentMonth ? "text-gray-400" : ""}
