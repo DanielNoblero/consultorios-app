@@ -22,14 +22,19 @@ import {
     ChevronUp,
 } from "lucide-react";
 
+import { marcarMesPagadoUsuario, marcarMesDeudaUsuario, } from "../utils/pagosUtils";
+
 const CONFIG_DOC_ID = "precioConsulta";
 
 // Helpers de fecha
 const formatDate = (year, month, day) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-const getCurrentMonthRange = () => {
+// Rango de mes con offset (0 = mes actual, 1 = mes siguiente, etc.)
+const getMonthRange = (offset = 0) => {
     const now = new Date();
+    now.setMonth(now.getMonth() + offset);
+
     const year = now.getFullYear();
     const month = now.getMonth(); // 0-11
     const firstDay = 1;
@@ -59,6 +64,9 @@ const Admin = () => {
     const [modalTitle, setModalTitle] = useState("");
     const [modalConfirm, setModalConfirm] = useState(null);
 
+    // 🔹 0 = mes actual, 1 = mes siguiente
+    const [monthOffset, setMonthOffset] = useState(0);
+
     // Detectar mobile
     useEffect(() => {
         const handleResize = () => setEsMobile(window.innerWidth < 768);
@@ -66,9 +74,9 @@ const Admin = () => {
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    // Reservas solo del mes actual
+    // Reservas del mes según filtro (actual / siguiente)
     useEffect(() => {
-        const { from, to } = getCurrentMonthRange();
+        const { from, to } = getMonthRange(monthOffset);
 
         const reservasRef = collection(db, "reservas");
         const reservasQuery = query(
@@ -82,7 +90,7 @@ const Admin = () => {
         });
 
         return () => unsub();
-    }, []);
+    }, [monthOffset]);
 
     // Psicólogos
     useEffect(() => {
@@ -166,7 +174,9 @@ const Admin = () => {
         });
     }, [psicologos]);
 
-    // 👉 TODOS los hooks (useState/useEffect/useMemo) están antes de este if
+    // Label para saber qué mes se está viendo
+    const monthLabel = monthOffset === 0 ? "Mes actual" : "Mes siguiente";
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 pt-24">
@@ -216,8 +226,7 @@ const Admin = () => {
         const psicologo = psicologos.find((p) => p.id === psicologoId);
         openModal(
             "Cambiar Rol",
-            `¿Seguro que quieres cambiar el rol de ${
-                psicologo?.nombre || "este psicólogo"
+            `¿Seguro que quieres cambiar el rol de ${psicologo?.nombre || "este psicólogo"
             } a ${nuevoRol}?`,
             async () => {
                 try {
@@ -253,8 +262,7 @@ const Admin = () => {
 
     const generarReporte = async () => {
         try {
-            const url =
-                "https://us-central1-consultorio-4e6c5.cloudfunctions.net/generarReporteManual";
+            const url = "https://generarreportemanual-onau7gysfq-uc.a.run.app";
             const response = await fetch(url);
 
             if (!response.ok) {
@@ -264,7 +272,35 @@ const Admin = () => {
             const blob = await response.blob();
             const link = document.createElement("a");
             link.href = window.URL.createObjectURL(blob);
-            link.download = "reporte-mensual.xlsx";
+
+            // 👇 Nombre dinámico: reporte-mes-año.xlsx (mes pasado)
+            const ahora = new Date();
+            let mes = ahora.getMonth() - 1; // mes pasado
+            let anio = ahora.getFullYear();
+
+            if (mes < 0) {
+                mes = 11; // diciembre
+                anio = anio - 1; // año anterior
+            }
+
+            const nombresMes = [
+                "enero",
+                "febrero",
+                "marzo",
+                "abril",
+                "mayo",
+                "junio",
+                "julio",
+                "agosto",
+                "setiembre",
+                "octubre",
+                "noviembre",
+                "diciembre",
+            ];
+
+            const nombreMes = nombresMes[mes];
+            link.download = `reporte-${nombreMes}-${anio}.xlsx`;
+
             link.click();
         } catch (error) {
             console.error(error);
@@ -283,6 +319,92 @@ const Admin = () => {
         }
     };
 
+    // 🔹 Año y mes según offset (0 = actual, 1 = siguiente)
+    const getYearMonthFromOffset = (offset) => {
+        const now = new Date();
+        now.setMonth(now.getMonth() + offset);
+        return {
+            year: now.getFullYear(),
+            month: now.getMonth() + 1, // 1-12
+        };
+    };
+
+    // 🔹 Toggle: si hay deuda → pagar; si todo está pago → marcar como deuda
+    const handlePagarMesUsuario = (psicologoId, nombre, hayDeudaMes) => {
+        const { year, month } = getYearMonthFromOffset(monthOffset);
+        const labelMes = monthOffset === 0 ? "mes actual" : "mes siguiente";
+
+        if (hayDeudaMes) {
+            // Caso normal: HAY deuda → marcar como pagado
+            openModal(
+                "Confirmar pago del mes",
+                `¿Marcar como PAGADAS todas las reservas NO pagadas del ${labelMes} para ${nombre || "este profesional"
+                }?`,
+                async () => {
+                    try {
+                        const cantidad = await marcarMesPagadoUsuario(
+                            psicologoId,
+                            year,
+                            month
+                        );
+
+                        if (cantidad > 0) {
+                            openModal(
+                                "✅ Pagos actualizados",
+                                `Se marcaron ${cantidad} reservas como pagadas.`
+                            );
+                        } else {
+                            openModal(
+                                "ℹ️ Sin cambios",
+                                "No había reservas pendientes de pago para ese período."
+                            );
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        openModal(
+                            "❌ Error",
+                            "No se pudieron actualizar los pagos del mes."
+                        );
+                    }
+                }
+            );
+        } else {
+            // NO hay deuda (todo pagado) → opción de revertir y volver a deuda
+            openModal(
+                "Confirmar revertir pago",
+                `¿Marcar como DEUDA todas las reservas del ${labelMes} para ${nombre || "este profesional"
+                }?`,
+                async () => {
+                    try {
+                        const cantidad = await marcarMesDeudaUsuario(
+                            psicologoId,
+                            year,
+                            month
+                        );
+
+                        if (cantidad > 0) {
+                            openModal(
+                                "✅ Estado revertido",
+                                `Se marcaron ${cantidad} reservas como DEUDA.`
+                            );
+                        } else {
+                            openModal(
+                                "ℹ️ Sin cambios",
+                                "No había reservas pagadas para este período."
+                            );
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        openModal(
+                            "❌ Error",
+                            "No se pudieron revertir los pagos del mes."
+                        );
+                    }
+                }
+            );
+        }
+    };
+
     return (
         <div className="max-w-7xl mx-auto p-4 sm:p-6 md:p-8 mt-24 sm:mt-70 bg-gray-50 min-h-screen">
             <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-blue-800 mb-8 border-b-4 border-blue-200 pb-2">
@@ -292,12 +414,17 @@ const Admin = () => {
 
             {/* --- RESUMEN FINANCIERO --- */}
             <div className="mb-8 p-6 bg-white rounded-xl shadow-2xl border border-green-200">
-                <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
-                    <DollarSign className="h-6 w-6 mr-2 text-green-600" />
-                    Reporte Financiero del Mes
+                <h2 className="text-2xl font-bold text-gray-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center">
+                        <DollarSign className="h-6 w-6 mr-2 text-green-600" />
+                        Reporte Financiero del Mes
+                    </span>
+                    <span className="text-sm font-semibold text-blue-600">
+                        {monthLabel}
+                    </span>
                 </h2>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-3">
                     <div className="p-4 bg-green-50 border-l-4 border-green-600 rounded-lg shadow-sm">
                         <p className="text-lg font-semibold text-gray-700">
                             Consultas realizadas:
@@ -358,11 +485,8 @@ const Admin = () => {
 
                 <button
                     onClick={handleGuardarPrecio}
-                    className={`text-white px-6 py-3 rounded-lg transition font-bold shadow-md ${
-                        isSavingPrice
-                            ? "bg-gray-400"
-                            : "bg-blue-600 hover:bg-blue-700"
-                    } flex items-center justify-center`}
+                    className={`text-white px-6 py-3 rounded-lg transition font-bold shadow-md ${isSavingPrice ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+                        } flex items-center justify-center`}
                 >
                     {isSavingPrice ? "Guardando..." : "Guardar Precios"}
                 </button>
@@ -400,24 +524,22 @@ const Admin = () => {
                             return (
                                 <div
                                     key={p.id}
-                                    className={`p-4 rounded-xl shadow-md border ${
-                                        tieneDeuda
-                                            ? "bg-red-50 border-red-300"
-                                            : "bg-gray-50 border-gray-200"
-                                    }`}
+                                    className={`p-4 rounded-xl shadow-md border ${tieneDeuda
+                                        ? "bg-red-50 border-red-300"
+                                        : "bg-gray-50 border-gray-200"
+                                        }`}
                                 >
                                     <div className="flex justify-between items-center mb-3">
                                         <h3 className="text-lg font-bold text-gray-900">
                                             {p.nombre}
                                         </h3>
                                         <span
-                                            className={`px-2 py-1 rounded-md text-xs font-semibold ${
-                                                p.rol === "admin"
-                                                    ? "bg-yellow-100 text-yellow-700"
-                                                    : p.rol === "psicologo"
+                                            className={`px-2 py-1 rounded-md text-xs font-semibold ${p.rol === "admin"
+                                                ? "bg-yellow-100 text-yellow-700"
+                                                : p.rol === "psicologo"
                                                     ? "bg-blue-100 text-blue-700"
                                                     : "bg-gray-200 text-gray-700"
-                                            }`}
+                                                }`}
                                         >
                                             {p.rol}
                                         </span>
@@ -431,11 +553,10 @@ const Admin = () => {
                                             </p>
 
                                             <p
-                                                className={`mt-3 font-bold ${
-                                                    tieneDeuda
-                                                        ? "text-red-700"
-                                                        : "text-green-700"
-                                                }`}
+                                                className={`mt-3 font-bold ${tieneDeuda
+                                                    ? "text-red-700"
+                                                    : "text-green-700"
+                                                    }`}
                                             >
                                                 Deuda del mes: ${deuda.toFixed(2)}
                                             </p>
@@ -495,11 +616,10 @@ const Admin = () => {
                                     return (
                                         <tr
                                             key={p.id}
-                                            className={`${
-                                                tieneDeuda
-                                                    ? "bg-red-50 hover:bg-red-100"
-                                                    : "even:bg-gray-50 hover:bg-gray-100"
-                                            }`}
+                                            className={`${tieneDeuda
+                                                ? "bg-red-50 hover:bg-red-100"
+                                                : "even:bg-gray-50 hover:bg-gray-100"
+                                                }`}
                                         >
                                             <td className="px-4 py-3 font-medium text-gray-900">
                                                 {p.nombre || "Psicólogo sin nombre"}
@@ -511,11 +631,10 @@ const Admin = () => {
                                                 </span>
                                             </td>
                                             <td
-                                                className={`px-4 py-3 text-center text-lg ${
-                                                    tieneDeuda
-                                                        ? "text-red-700 font-extrabold"
-                                                        : "text-green-600 font-bold"
-                                                }`}
+                                                className={`px-4 py-3 text-center text-lg ${tieneDeuda
+                                                    ? "text-red-700 font-extrabold"
+                                                    : "text-green-600 font-bold"
+                                                    }`}
                                             >
                                                 ${deuda.toFixed(2)}
                                             </td>
@@ -550,10 +669,36 @@ const Admin = () => {
 
             {/* --- DETALLES POR PSICÓLOGO --- */}
             <div className="mb-8">
-                <h2 className="text-2xl font-bold text-gray-700 mb-4 flex items-center">
-                    <Calendar className="h-6 w-6 mr-2 text-blue-600" />
-                    Detalle de Reservas
-                </h2>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <h2 className="text-2xl font-bold text-gray-700 flex items-center">
+                        <Calendar className="h-6 w-6 mr-2 text-blue-600" />
+                        Detalle de Reservas
+                    </h2>
+
+                    {/* 🔹 Filtros de mes (actual / siguiente) */}
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setMonthOffset(0)}
+                            className={`px-3 py-1 rounded-full text-sm font-semibold border transition ${monthOffset === 0
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"
+                                }`}
+                        >
+                            Mes actual
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMonthOffset(1)}
+                            className={`px-3 py-1 rounded-full text-sm font-semibold border transition ${monthOffset === 1
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"
+                                }`}
+                        >
+                            Mes siguiente
+                        </button>
+                    </div>
+                </div>
 
                 <div className="space-y-4">
                     {psicologosOrdenados.map((p) => {
@@ -564,50 +709,78 @@ const Admin = () => {
                         const deudaTotal = calcularDeudaDelMes(p.id);
                         const tieneDeuda = parseFloat(deudaTotal) > 0;
                         const isOpen = acordeonesAbiertos[p.id];
-
+                        const hayDeudaMes = tieneDeuda;
                         return (
                             <div
                                 key={p.id}
                                 className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
                             >
-                                <button
+                                <div
+                                    role="button"
+                                    tabIndex={0}
                                     onClick={() =>
                                         setAcordeonesAbiertos((prev) => ({
                                             ...prev,
                                             [p.id]: !prev[p.id],
                                         }))
                                     }
-                                    className={`w-full flex justify-between items-center p-4 text-left ${
-                                        tieneDeuda
-                                            ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500"
-                                            : "bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500"
-                                    }`}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            setAcordeonesAbiertos((prev) => ({
+                                                ...prev,
+                                                [p.id]: !prev[p.id],
+                                            }));
+                                        }
+                                    }}
+                                    className={`w-full flex justify-between items-center p-4 text-left ${tieneDeuda
+                                        ? "bg-red-50 hover:bg-red-100 border-l-4 border-red-500"
+                                        : "bg-blue-50 hover:bg-blue-100 border-l-4 border-blue-500"
+                                        }`}
                                 >
-                                    <div>
-                                        <span className="text-lg font-bold text-gray-800 flex items-center">
-                                            {p.nombre || "Psicólogo sin nombre"}
-                                            <span className="ml-3 px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-semibold uppercase">
+                                    <div className="flex-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-lg font-bold text-gray-800">
+                                                {p.nombre || "Psicólogo sin nombre"}
+                                            </span>
+
+                                            <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-semibold uppercase">
                                                 {p.rol}
                                             </span>
-                                        </span>
+
+                                        </div>
 
                                         <span
-                                            className={`block text-sm font-semibold mt-1 ${
-                                                tieneDeuda
-                                                    ? "text-red-600"
-                                                    : "text-green-600"
-                                            }`}
+                                            className={`block text-sm font-semibold mt-1 ${tieneDeuda ? "text-red-600" : "text-green-600"
+                                                }`}
                                         >
                                             Deuda Pendiente: ${deudaTotal}
                                         </span>
                                     </div>
-
-                                    {isOpen ? (
-                                        <ChevronUp className="h-6 w-6 text-gray-600" />
-                                    ) : (
-                                        <ChevronDown className="h-6 w-6 text-gray-600" />
+                                    {p.rol !== "admin" && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // no abrir/cerrar acordeón
+                                                handlePagarMesUsuario(p.id, p.nombre, hayDeudaMes);
+                                            }}
+                                            className={`ml-2 px-3 py-3 rounded-md text-xs text-white font-semibold shadow
+                        ${hayDeudaMes
+                                                    ? "bg-emerald-600 hover:bg-emerald-700" // 🟢 Pagar mes
+                                                    : "bg-red-600 hover:bg-red-700"         // 🔴 Marcar como deuda
+                                                }`}
+                                        >
+                                            {hayDeudaMes
+                                                ? `Pagar ${monthLabel.toLowerCase()}`
+                                                : "Marcar como deuda"}
+                                        </button>
                                     )}
-                                </button>
+                                    {isOpen ? (
+                                        <ChevronUp className="ml-10 h-6 w-6 text-gray-600" />
+                                    ) : (
+                                        <ChevronDown className="ml-10 h-6 w-6 text-gray-600" />
+                                    )}
+                                </div>
 
                                 {isOpen && (
                                     <div className="p-1 bg-gray-50 border-t border-gray-200">
@@ -637,11 +810,10 @@ const Admin = () => {
                                                     {reservasPsicologo.map((r) => (
                                                         <tr
                                                             key={r.id}
-                                                            className={`text-center ${
-                                                                r.pagado
-                                                                    ? "bg-white"
-                                                                    : "bg-yellow-50"
-                                                            } hover:bg-gray-100`}
+                                                            className={`text-center ${r.pagado
+                                                                ? "bg-white"
+                                                                : "bg-yellow-50"
+                                                                } hover:bg-gray-100`}
                                                         >
                                                             <td className="px-1 py-2 text-left font-medium">
                                                                 {r.consultorio}
@@ -653,11 +825,10 @@ const Admin = () => {
                                                             </td>
 
                                                             <td
-                                                                className={`px-1 py-2 font-semibold ${
-                                                                    r.pagado
-                                                                        ? "text-gray-600"
-                                                                        : "text-red-500"
-                                                                }`}
+                                                                className={`px-1 py-2 font-semibold ${r.pagado
+                                                                    ? "text-gray-600"
+                                                                    : "text-red-500"
+                                                                    }`}
                                                             >
                                                                 ${r.precio}
                                                             </td>
@@ -682,11 +853,10 @@ const Admin = () => {
                                                                         onClick={() =>
                                                                             togglePago(r)
                                                                         }
-                                                                        className={`px-2 py-1 rounded-md text-white text-xs font-semibold ${
-                                                                            r.pagado
-                                                                                ? "bg-gray-500 hover:bg-gray-600"
-                                                                                : "bg-green-600 hover:bg-green-700"
-                                                                        }`}
+                                                                        className={`px-2 py-1 rounded-md text-white text-xs font-semibold ${r.pagado
+                                                                            ? "bg-gray-500 hover:bg-gray-600"
+                                                                            : "bg-green-600 hover:bg-green-700"
+                                                                            }`}
                                                                     >
                                                                         {r.pagado
                                                                             ? "Marcar Deuda"

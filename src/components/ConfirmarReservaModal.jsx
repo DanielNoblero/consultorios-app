@@ -19,10 +19,18 @@ const ConfirmarReservaModal = ({
     const [recurrenciaTipo, setRecurrenciaTipo] = useState("Semanal");
     const [recurrenciaCantidad, setRecurrenciaCantidad] = useState(1);
 
+    // 🚫 Para evitar doble / triple envío
+    const [isConfirming, setIsConfirming] = useState(false);
+
     const cerrar = () => setIsReservaModalOpen(false);
 
     const confirmar = async () => {
+        // Si ya está procesando, no hacer nada
+        if (isConfirming) return;
+
         try {
+            setIsConfirming(true);
+
             await confirmarReserva({
                 reservaBase: reservaAConfirmar,
                 tipoReserva,
@@ -47,6 +55,9 @@ const ConfirmarReservaModal = ({
                 "Error",
                 "Ocurrió un problema al confirmar la reserva."
             );
+        } finally {
+            // por las dudas, lo volvemos a habilitar
+            setIsConfirming(false);
         }
     };
 
@@ -75,6 +86,7 @@ const ConfirmarReservaModal = ({
                         className="w-full mt-1 p-3 border rounded-lg bg-gray-100 focus:ring-2 focus:ring-blue-400"
                         value={tipoReserva}
                         onChange={(e) => setTipoReserva(e.target.value)}
+                        disabled={isConfirming}
                     >
                         <option value="Ocasional">Ocasional</option>
                         <option value="Recurrente">Recurrente</option>
@@ -83,7 +95,7 @@ const ConfirmarReservaModal = ({
 
                 {/* OPCIONES SOLO SI ES RECURRENTE */}
                 {tipoReserva === "Recurrente" && (
-                    <div className="space-y-4">
+                    <div className="space-y-4 mt-4">
 
                         <div>
                             <label className="font-semibold">Recurrencia</label>
@@ -91,6 +103,7 @@ const ConfirmarReservaModal = ({
                                 className="w-full mt-1 p-2 border rounded-lg"
                                 value={recurrenciaTipo}
                                 onChange={(e) => setRecurrenciaTipo(e.target.value)}
+                                disabled={isConfirming}
                             >
                                 <option value="Semanal">Semanal</option>
                                 <option value="Mensual">Mensual</option>
@@ -108,6 +121,7 @@ const ConfirmarReservaModal = ({
                                 onChange={(e) =>
                                     setRecurrenciaCantidad(Number(e.target.value))
                                 }
+                                disabled={isConfirming}
                             />
                         </div>
 
@@ -120,15 +134,20 @@ const ConfirmarReservaModal = ({
                         onClick={cerrar}
                         className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 
                                     text-gray-700 font-semibold transition"
+                        disabled={isConfirming}
                     >
                         Cancelar
                     </button>
                     <button
                         onClick={confirmar}
-                        className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 
-                                    text-white font-bold shadow-md transition"
+                        className={`px-6 py-2 rounded-lg text-white font-bold shadow-md transition
+                            ${isConfirming
+                                ? "bg-blue-300 cursor-not-allowed"
+                                : "bg-blue-600 hover:bg-blue-700"
+                            }`}
+                        disabled={isConfirming}
                     >
-                        Confirmar
+                        {isConfirming ? "Confirmando..." : "Confirmar"}
                     </button>
                 </div>
             </div>

@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "consultorio-4e6c5"
-  }
+    "default": "consultorio-4e6c5",
+    "prod": "analysis-5abda"
+  },
+  "targets": {},
+  "etags": {}
 }

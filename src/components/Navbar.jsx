@@ -107,7 +107,7 @@ export default function Navbar() {
                             className="w-9 h-20 object-contain drop-shadow-md"
                         />
                         <span className="text-sky-800 font-extrabold text-xl tracking-wide">
-                            Analyse
+                            Analysis
                         </span>
                     </Link>
 

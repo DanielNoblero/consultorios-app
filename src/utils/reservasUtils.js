@@ -17,6 +17,7 @@ import {
     deleteDoc
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
+
 // =====================================================
 // PRECIOS CONFIGURADOS
 // =====================================================
@@ -162,6 +163,23 @@ export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales
 };
 
 // =====================================================
+//  HELPER: DETECTAR SI UNA RESERVA YA EXISTE (PARA EVITAR DUPLICADOS)
+// =====================================================
+const mismaReserva = (a, b) => {
+    return (
+        a.psicologoId === b.psicologoId &&
+        a.fecha === b.fecha &&
+        a.horaInicio === b.horaInicio &&
+        a.horaFin === b.horaFin &&
+        a.consultorio === b.consultorio
+    );
+};
+
+const existeReservaEnLista = (lista, reserva) => {
+    return lista.some((r) => mismaReserva(r, reserva));
+};
+
+// =====================================================
 //  CONFIRMAR RESERVA (SOLO psicologoId, ADMIN = PRECIO 0)
 // =====================================================
 export const confirmarReserva = async ({
@@ -210,7 +228,7 @@ export const confirmarReserva = async ({
 
             const fechaStr = date.toISOString().split("T")[0];
 
-            nuevas.push({
+            const nuevaReserva = {
                 psicologoId: psicologo.uid, // 🔥 ÚNICO ID DE VÍNCULO
                 nombre: perfil.nombre || "",
                 apellido: perfil.apellido || "",
@@ -227,7 +245,22 @@ export const confirmarReserva = async ({
                 precio: null,
                 pagado: false,
                 groupId: groupId,
-            });
+            };
+
+            // ⚠️ ANTI-DUPLICADOS:
+            // Si ya existe una reserva igual en Firestore o en las que vamos generando, NO la agregamos.
+            if (
+                !existeReservaEnLista(existentes, nuevaReserva) &&
+                !existeReservaEnLista(nuevas, nuevaReserva)
+            ) {
+                nuevas.push(nuevaReserva);
+            }
+        }
+
+        // Si por algún motivo no quedó ninguna nueva (todo ya existía), salimos
+        if (nuevas.length === 0) {
+            console.warn("No se generaron nuevas reservas porque ya existían.");
+            return;
         }
 
         // =====================================================
@@ -284,6 +317,7 @@ export const confirmarReserva = async ({
         console.error("ERROR confirmando reserva:", error);
     }
 };
+
 // =====================================================
 // ELIMINAR RESERVAS (UNA O TODA LA SERIE)
 // =====================================================

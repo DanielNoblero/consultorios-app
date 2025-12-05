@@ -6,13 +6,15 @@ const { onRequest, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const ExcelJS = require("exceljs");
-const nodemailer = require("nodemailer");
+const nodemailer = require("nodemailer"); // (por si lo usás en otras funciones)
 
 admin.initializeApp();
 const db = admin.firestore();
 
 /* =============================================================
    FUNCIÓN AUXILIAR: GENERAR EXCEL AGRUPADO POR PROFESIONAL
+   - Solo incluye reservas pagadas y con precio > 0
+   - Ignora reservas de admin (precio 0)
 ============================================================= */
 async function construirReporteExcel(snapshot) {
     const usuariosSnap = await db.collection("usuarios").get();
@@ -26,19 +28,33 @@ async function construirReporteExcel(snapshot) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Reporte Mensual");
 
-    if (snapshot.empty) {
-        sheet.addRow(["No hay reservas en este período."]);
-        sheet.getRow(1).font = { bold: true };
-        return await workbook.xlsx.writeBuffer();
-    }
-
+    // Agrupamos por profesional, pero filtrando antes
     const reservasPorProfesional = {};
+
     snapshot.forEach((doc) => {
         const r = doc.data();
+
+        // ✅ Ignoramos reservas que no generan dinero:
+        // - No pagadas
+        // - Con precio 0 o vacío (admin, pruebas, etc.)
+        const precio = Number(r.precio || 0);
+        const estaPagada = !!r.pagado;
+
+        if (!estaPagada || precio <= 0) {
+            return; // No entra al reporte
+        }
+
         const uid = r.usuarioId || r.userId || "sin-usuario";
         if (!reservasPorProfesional[uid]) reservasPorProfesional[uid] = [];
         reservasPorProfesional[uid].push(r);
     });
+
+    // Si después de filtrar no quedó nada útil
+    if (Object.keys(reservasPorProfesional).length === 0) {
+        sheet.addRow(["No hay reservas pagadas en este período."]);
+        sheet.getRow(1).font = { bold: true };
+        return await workbook.xlsx.writeBuffer();
+    }
 
     let totalGeneral = 0;
 
@@ -49,41 +65,70 @@ async function construirReporteExcel(snapshot) {
         sheet.addRow([]);
         const titulo = sheet.addRow([`=== ${nombre} ===`]);
         titulo.font = { bold: true, color: { argb: "FFFFFFFF" } };
-        titulo.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4169E1" } };
+        titulo.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FF4169E1" },
+        };
 
-        const header = sheet.addRow(["Consultorio", "Fecha", "Hora Inicio", "Hora Fin", "Precio"]);
+        const header = sheet.addRow([
+            "Consultorio",
+            "Fecha",
+            "Hora Inicio",
+            "Hora Fin",
+            "Precio",
+        ]);
         header.font = { bold: true };
-        header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
+        header.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFE0E0E0" },
+        };
 
         let total = 0;
 
         reservas.forEach((r) => {
+            const precio = Number(r.precio || 0);
+
             sheet.addRow([
                 r.consultorio || "",
                 r.fecha || "",
                 r.horaInicio || "",
                 r.horaFin || "",
-                r.precio || 0,
+                precio,
             ]);
-            total += r.precio || 0;
-            totalGeneral += r.precio || 0;
+
+            total += precio;
+            totalGeneral += precio;
         });
 
         const totalRow = sheet.addRow([`TOTAL PROFESIONAL: ${total}`]);
         totalRow.font = { bold: true, color: { argb: "FF006400" } };
-        totalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCFFCC" } };
+        totalRow.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFCCFFCC" },
+        };
     });
 
     sheet.addRow([]);
     const totalGrl = sheet.addRow([`TOTAL GENERAL GENERADO: ${totalGeneral}`]);
     totalGrl.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    totalGrl.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF228B22" } };
+    totalGrl.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF228B22" },
+    };
 
     return await workbook.xlsx.writeBuffer();
 }
 
 /* =============================================================
    1) GENERAR REPORTE MANUAL (Excel) + LIMPIEZA DEL MES PASADO
+   - Reporte: solo reservas pagadas y precio > 0
+   - Limpieza:
+       * Borra SIEMPRE reservas de precio 0 (admin, sin deuda)
+       * Borra reservas con precio > 0 SOLO si están pagadas
 ============================================================= */
 exports.generarReporteManual = onRequest(
     {
@@ -91,7 +136,6 @@ exports.generarReporteManual = onRequest(
         invoker: "public",
     },
     async (req, res) => {
-
         // Preflight para CORS
         if (req.method === "OPTIONS") {
             res.set("Access-Control-Allow-Origin", "*");
@@ -113,34 +157,59 @@ exports.generarReporteManual = onRequest(
             const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual;
 
             const inicioMesPasado = new Date(anioMesPasado, mesPasado, 1);
-            const finMesPasado = new Date(anioMesPasado, mesPasado + 1, 0, 23, 59, 59);
+            const finMesPasado = new Date(
+                anioMesPasado,
+                mesPasado + 1,
+                0,
+                23,
+                59,
+                59
+            );
 
             // 🔥 Formato correcto AAAA-MM-DD
             const inicioStr = inicioMesPasado.toISOString().split("T")[0];
             const finStr = finMesPasado.toISOString().split("T")[0];
 
-            // --- TRAER RESERVAS ---
+            // --- TRAER RESERVAS DEL PERÍODO ---
+            // Traemos TODAS las reservas del mes pasado (pagadas, no pagadas, admin, etc.)
             const snapshot = await db
                 .collection("reservas")
-                .where("pagado", "==", true)
                 .where("fecha", ">=", inicioStr)
                 .where("fecha", "<=", finStr)
                 .get();
 
-            // --- GENERAR EXCEL ---
+            // --- GENERAR EXCEL (dentro se filtran pagadas y precio > 0) ---
             const buffer = await construirReporteExcel(snapshot);
 
             // --- ENVIAR ARCHIVO ---
-            res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            res.set("Content-Disposition", "attachment; filename=reporte-mensual.xlsx");
+            res.set(
+                "Content-Type",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            );
+            res.set(
+                "Content-Disposition",
+                "attachment; filename=reporte-mensual.xlsx"
+            );
 
             // --- LIMPIEZA DESPUÉS DE ENVIAR EL ARCHIVO ---
             const batch = db.batch();
-            snapshot.forEach(doc => {
+            snapshot.forEach((doc) => {
                 const r = doc.data();
                 const fechaReserva = new Date(r.fecha + "T00:00:00");
+                const precio = Number(r.precio || 0);
+                const estaPagada = !!r.pagado;
 
-                if (fechaReserva < hoy) {
+                // Solo consideramos reservas del pasado
+                if (fechaReserva >= hoy) {
+                    return;
+                }
+
+                const esPrecioCero = precio <= 0;
+
+                // ✅ Reglas de borrado:
+                // - Si es precio 0 (admin / sin deuda) → borrar SIEMPRE al cerrar el mes.
+                // - Si tiene precio > 0 → borrar solo si está pagada.
+                if (esPrecioCero || estaPagada) {
                     batch.delete(doc.ref);
                 }
             });
@@ -148,7 +217,6 @@ exports.generarReporteManual = onRequest(
             await batch.commit();
 
             return res.status(200).send(Buffer.from(buffer));
-
         } catch (error) {
             console.error("Error generando reporte:", error);
 
@@ -158,7 +226,7 @@ exports.generarReporteManual = onRequest(
             return res.status(500).send("Error generando reporte");
         }
     }
-); 
+);
 
 /* =============================================================
    2) ASIGNAR ROL ADMIN (Custom Claims)
@@ -167,7 +235,9 @@ exports.asignarRolAdmin = onCall(async (request) => {
     try {
         // 🔐 Validación correcta para múltiples admins
         if (request.auth?.token?.rol !== "admin") {
-            throw new Error("No autorizado: solo administradores pueden asignar roles.");
+            throw new Error(
+                "No autorizado: solo administradores pueden asignar roles."
+            );
         }
 
         const email = request.data.email;
@@ -186,7 +256,6 @@ exports.asignarRolAdmin = onCall(async (request) => {
             ok: true,
             message: `Rol '${rol}' asignado a ${email}`,
         };
-
     } catch (error) {
         logger.error("Error asignando rol:", error);
         throw new Error(error.message || "Error interno");
