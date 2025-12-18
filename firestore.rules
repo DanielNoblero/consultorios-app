@@ -16,14 +16,15 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == "admin";
     }
 
-    // --- USUARIOS ---
+     // --- USUARIOS ---
     match /usuarios/{uid} {
 
       // Crear solo su propio documento
       allow create: if isOwner(uid);
 
-      // Leer: su propio perfil o admin
-      allow read: if isOwner(uid) || isAdmin();
+      // 🔥 Leer: cualquier usuario autenticado
+      // Necesario para que /reservas pueda mostrar iniciales de otros psicólogos
+      allow read: if isLoggedIn();
 
       // Actualizar: dueño (excepto rol) o admin
       allow update: if
@@ -33,6 +34,7 @@ service cloud.firestore {
         )
         || isAdmin();
 
+      // Nunca borrar usuarios desde el frontend
       allow delete: if false;
     }
 

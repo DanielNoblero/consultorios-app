@@ -101,6 +101,7 @@ const updateReservationPrice = async (id, price) => {
 
 // =====================================================
 //  TRAER RESERVAS DEL DÍA (para el calendario)
+//  ❌ SIN LECTURAS A /usuarios → SOLO USA CAMPOS DE LA RESERVA
 // =====================================================
 export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales) => {
     if (!fechaSeleccionada) return [];
@@ -120,34 +121,21 @@ export const traerReservas = async (fechaSeleccionada, consultorio, getIniciales
         const snap = await getDocs(q);
         if (snap.empty) return [];
 
-        const reservas = [];
-        const cache = {};
-
-        for (let docu of snap.docs) {
+        const reservas = snap.docs.map((docu) => {
             const data = docu.data();
 
-            // 🔥 AHORA SOLO USAMOS psicologoId
-            const psicologoId = data.psicologoId;
-            if (!psicologoId) continue; // si por alguna razón no existe, salteamos
+            const nombre = data.nombre || "";
+            const apellido = data.apellido || "";
 
-            if (!cache[psicologoId]) {
-                const uSnap = await getDoc(doc(db, "usuarios", psicologoId));
-                cache[psicologoId] = uSnap.exists()
-                    ? uSnap.data()
-                    : { nombre: "Desconocido", apellido: "" };
-            }
-
-            const u = cache[psicologoId];
-
-            reservas.push({
+            return {
                 id: docu.id,
                 ...data,
-                nombre: u.nombre,
-                apellido: u.apellido,
-                iniciales: getIniciales(u.nombre, u.apellido),
+                nombre,
+                apellido,
+                iniciales: getIniciales(nombre, apellido),
                 fechaObj: new Date(`${data.fecha}T00:00:00`),
-            });
-        }
+            };
+        });
 
         reservas.sort(
             (a, b) =>

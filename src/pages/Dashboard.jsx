@@ -16,14 +16,19 @@ import ModalRecurrente from "../components/ModalRecurrente";
 
 const CONFIG_DOC_ID = "precioConsulta";
 
+const formatCurrency = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "0.00";
+    return n.toFixed(2);
+};
+
 // ────────────────────────────────────────────────
 // COMPONENTES AUXILIARES (mismo diseño que antes)
 // ────────────────────────────────────────────────
 const Notification = ({ tipo, mensaje }) => (
     <div
-        className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-2xl text-white font-semibold transition-all duration-300 ease-out ${
-            tipo === "success" ? "bg-green-500" : "bg-red-500"
-        }`}
+        className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-2xl text-white font-semibold transition-all duration-300 ease-out ${tipo === "success" ? "bg-green-500" : "bg-red-500"
+            }`}
     >
         {mensaje}
     </div>
@@ -49,7 +54,7 @@ const CancelarModal = ({ isOpen, onClose, onConfirm, reserva }) => {
                         🕒 Horario: {reserva.horaInicio} - {reserva.horaFin}
                     </p>
                     <p className="mt-1">
-                        Costo: ${reserva.precio.toFixed(2)}
+                        Costo: ${formatCurrency(reserva.precio)}
                     </p>
                 </div>
                 <p className="mt-3 text-sm text-red-700 font-semibold">
@@ -75,32 +80,37 @@ const CancelarModal = ({ isOpen, onClose, onConfirm, reserva }) => {
     );
 };
 
-const DeudaCards = ({ totalSemana, totalMes }) => (
-    <section className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-sky-100 p-4 flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">
-                Deuda de esta semana
-            </span>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                ${totalSemana.toFixed(2)}
+const DeudaCards = ({ totalSemana, totalMes, totalMesAnterior, nombreMesAnterior }) => (
+    <section className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Semana */}
+        <div className="bg-white rounded-2xl shadow-lg border border-sky-100 p-4">
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Deuda de esta semana</span>
+            <p className="text-3xl font-extrabold">
+                ${formatCurrency(totalSemana)}
             </p>
-            <p className="text-xs text-slate-500">
-                Suma de todas las consultas no pagas dentro de la semana
-                actual.
-            </p>
+            <p className="text-xs text-slate-500">Suma de todas las consultas no pagas dentro de la semana actual.</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 p-4 flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-                Deuda del mes
-            </span>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                ${totalMes.toFixed(2)}
+        {/* Mes actual */}
+        <div className="bg-white rounded-2xl shadow-lg border border-emerald-100 p-4">
+            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Deuda del mes</span>
+            <p className="text-3xl font-extrabold">
+                ${formatCurrency(totalMes)}
             </p>
-            <p className="text-xs text-slate-500">
-                Incluye todas las reservas pendientes de pago del mes.
-            </p>
+            <p className="text-xs text-slate-500">Incluye todas las reservas pendientes de pago del mes.</p>
         </div>
+
+        {/* Mes anterior (solo si hay deuda) */}
+        {totalMesAnterior > 0 && (
+            <div className="bg-amber-50 rounded-2xl shadow-lg border border-amber-200 p-4">
+                <span className="text-xs font-semibold text-amber-700">
+                    Deuda {nombreMesAnterior}
+                </span>
+                <p className="text-3xl font-extrabold text-amber-900">
+                    ${formatCurrency(totalMesAnterior)}
+                </p>
+            </div>
+        )}
     </section>
 );
 
@@ -138,10 +148,10 @@ const Dashboard = () => {
 
     const [mostrarSemana, setMostrarSemana] = useState(true);
     const [mostrarPasadas, setMostrarPasadas] = useState(false);
-
+    const [nombreMesAnterior, setNombreMesAnterior] = useState("");
     const [nombreMesActual, setNombreMesActual] = useState("");
     const [nombreMesSiguiente, setNombreMesSiguiente] = useState("");
-
+    const [totalMesAnterior, setTotalMesAnterior] = useState(0);
     const [vista, setVista] = useState("semana");
     const [reservasMes, setReservasMes] = useState({ semanas: {}, plano: [] });
     const [totalMesVista, setTotalMesVista] = useState(0);
@@ -235,7 +245,29 @@ const Dashboard = () => {
                 .reduce((acc, r) => acc + Number(r.precio || 0), 0);
 
             setTotalMes(deudaMes);
+            // ───────────────────────────────────────────────
+            // CÁLCULO DEUDA MES ANTERIOR
+            // ───────────────────────────────────────────────
+            const mesAnterior =
+                mesCalc === 0 ? 11 : mesCalc - 1;
 
+            const añoMesAnterior =
+                mesCalc === 0 ? añoCalc - 1 : añoCalc;
+
+            setNombreMesAnterior(meses[mesAnterior]);
+
+            const deudaMesAnterior = reservasArray
+                .filter((r) => {
+                    const fecha = new Date(`${r.fecha}T00:00:00`);
+                    return (
+                        fecha.getMonth() === mesAnterior &&
+                        fecha.getFullYear() === añoMesAnterior &&
+                        !r.pagado
+                    );
+                })
+                .reduce((acc, r) => acc + Number(r.precio || 0), 0);
+
+            setTotalMesAnterior(deudaMesAnterior);
             // ───────────────────────────────────────────────
             // MES ACTUAL / SIGUIENTE
             // ───────────────────────────────────────────────
@@ -354,8 +386,8 @@ const Dashboard = () => {
 
     const apellidoUsuario = capitalize(
         user?.apellido ||
-            user?.displayName?.split(" ").slice(1).join(" ") ||
-            ""
+        user?.displayName?.split(" ").slice(1).join(" ") ||
+        ""
     );
 
     const nombreCompleto = `${nombreUsuario} ${apellidoUsuario}`.trim();
@@ -401,14 +433,14 @@ const Dashboard = () => {
         const estadoPago = esAdmin
             ? null
             : r.pagado ? (
-                  <span className="text-emerald-600 font-semibold flex items-center gap-1">
-                      Pagado ✅
-                  </span>
-              ) : (
-                  <span className="text-amber-700 font-semibold flex items-center gap-1">
-                      Pendiente de pago ⚠️
-                  </span>
-              );
+                <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                    Pagado ✅
+                </span>
+            ) : (
+                <span className="text-amber-700 font-semibold flex items-center gap-1">
+                    Pendiente de pago ⚠️
+                </span>
+            );
 
         const baseClass =
             "flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 rounded-xl border shadow-sm transition duration-200 ease-in-out";
@@ -420,9 +452,8 @@ const Dashboard = () => {
         return (
             <li
                 key={r.id}
-                className={`${baseClass} ${
-                    fechaReserva >= ahora ? futureClass : pastClass
-                }`}
+                className={`${baseClass} ${fechaReserva >= ahora ? futureClass : pastClass
+                    }`}
             >
                 <div className="text-sm sm:text-base space-y-1">
                     <p className="font-semibold text-slate-900">
@@ -433,7 +464,7 @@ const Dashboard = () => {
                     </p>
 
                     <p className="text-slate-700">
-                        Precio: ${r.precio.toFixed(2)}
+                        Precio: ${formatCurrency(r.precio)}
                         {!esAdmin && <> | {estadoPago}</>}
                     </p>
                 </div>
@@ -491,7 +522,7 @@ const Dashboard = () => {
                     </div>
                 </section>
 
-                <DeudaCards totalSemana={totalSemana} totalMes={totalMes} />
+                <DeudaCards totalSemana={totalSemana} totalMes={totalMes} totalMesAnterior={totalMesAnterior} nombreMesAnterior={nombreMesAnterior} />
 
                 <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-sky-100 p-6">
@@ -499,33 +530,30 @@ const Dashboard = () => {
                         <div className="flex gap-3 mb-4">
                             <button
                                 onClick={() => setVista("semana")}
-                                className={`px-4 py-2 rounded-lg font-semibold transition ${
-                                    vista === "semana"
-                                        ? "bg-sky-600 text-white shadow"
-                                        : "bg-white border border-sky-300 text-sky-700"
-                                }`}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "semana"
+                                    ? "bg-sky-600 text-white shadow"
+                                    : "bg-white border border-sky-300 text-sky-700"
+                                    }`}
                             >
                                 Semana actual
                             </button>
 
                             <button
                                 onClick={() => setVista("mes")}
-                                className={`px-4 py-2 rounded-lg font-semibold transition ${
-                                    vista === "mes"
-                                        ? "bg-sky-600 text-white shadow"
-                                        : "bg-white border border-sky-300 text-sky-700"
-                                }`}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "mes"
+                                    ? "bg-sky-600 text-white shadow"
+                                    : "bg-white border border-sky-300 text-sky-700"
+                                    }`}
                             >
                                 Mes actual
                             </button>
 
                             <button
                                 onClick={() => setVista("mesSiguiente")}
-                                className={`px-4 py-2 rounded-lg font-semibold transition ${
-                                    vista === "mesSiguiente"
-                                        ? "bg-sky-600 text-white shadow"
-                                        : "bg-white border border-sky-300 text-sky-700"
-                                }`}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${vista === "mesSiguiente"
+                                    ? "bg-sky-600 text-white shadow"
+                                    : "bg-white border border-sky-300 text-sky-700"
+                                    }`}
                             >
                                 Mes siguiente
                             </button>
@@ -543,8 +571,8 @@ const Dashboard = () => {
                                 {vista === "semana"
                                     ? reservasSemanaMostrar.length
                                     : vista === "mes"
-                                    ? reservasMes.plano.length
-                                    : reservasMesSiguiente.length}
+                                        ? reservasMes.plano.length
+                                        : reservasMesSiguiente.length}
                                 )
                             </h2>
 

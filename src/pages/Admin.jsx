@@ -26,24 +26,57 @@ import { marcarMesPagadoUsuario, marcarMesDeudaUsuario, } from "../utils/pagosUt
 
 const CONFIG_DOC_ID = "precioConsulta";
 
-// Helpers de fecha
+// ============================
+// HELPERS DE FECHA / MES
+// ============================
 const formatDate = (year, month, day) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-// Rango de mes con offset (0 = mes actual, 1 = mes siguiente, etc.)
 const getMonthRange = (offset = 0) => {
-    const now = new Date();
-    now.setMonth(now.getMonth() + offset);
+    const d = new Date();
+    d.setMonth(d.getMonth() + offset);
 
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-11
-    const firstDay = 1;
+    const year = d.getFullYear();
+    const month = d.getMonth();
     const lastDay = new Date(year, month + 1, 0).getDate();
 
     return {
-        from: formatDate(year, month, firstDay),
+        from: formatDate(year, month, 1),
         to: formatDate(year, month, lastDay),
     };
+};
+// ============================
+// HELPER NOMBRE DE MES
+// ============================
+const getNombreMes = (offset = 0) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + offset);
+
+    const nombresMes = [
+        "Enero",
+        "Febrero",
+        "Marzo",
+        "Abril",
+        "Mayo",
+        "Junio",
+        "Julio",
+        "Agosto",
+        "Septiembre",
+        "Octubre",
+        "Noviembre",
+        "Diciembre",
+    ];
+
+    return `${nombresMes[d.getMonth()]} ${d.getFullYear()}`;
+};
+// ============================
+// HELPERS USUARIOS
+// ============================
+const getNombreCompleto = (u) => {
+    if (!u) return "Usuario";
+    const nombre = u.nombre?.trim() || "";
+    const apellido = u.apellido?.trim() || "";
+    return `${nombre} ${apellido}`.trim() || "Sin nombre";
 };
 
 const Admin = () => {
@@ -175,7 +208,7 @@ const Admin = () => {
     }, [psicologos]);
 
     // Label para saber qué mes se está viendo
-    const monthLabel = monthOffset === 0 ? "Mes actual" : "Mes siguiente";
+    const monthLabel = monthOffset === -1 ? "Mes anterior" : monthOffset === 0 ? "Mes actual" : "Mes siguiente";
 
     if (isLoading) {
         return (
@@ -332,7 +365,7 @@ const Admin = () => {
     // 🔹 Toggle: si hay deuda → pagar; si todo está pago → marcar como deuda
     const handlePagarMesUsuario = (psicologoId, nombre, hayDeudaMes) => {
         const { year, month } = getYearMonthFromOffset(monthOffset);
-        const labelMes = monthOffset === 0 ? "mes actual" : "mes siguiente";
+        const labelMes = monthOffset === -1 ? "mes anterior" : monthOffset === 0 ? "mes actual" : "mes siguiente";
 
         if (hayDeudaMes) {
             // Caso normal: HAY deuda → marcar como pagado
@@ -531,7 +564,7 @@ const Admin = () => {
                                 >
                                     <div className="flex justify-between items-center mb-3">
                                         <h3 className="text-lg font-bold text-gray-900">
-                                            {p.nombre}
+                                            {getNombreCompleto(p)}
                                         </h3>
                                         <span
                                             className={`px-2 py-1 rounded-md text-xs font-semibold ${p.rol === "admin"
@@ -622,7 +655,7 @@ const Admin = () => {
                                                 }`}
                                         >
                                             <td className="px-4 py-3 font-medium text-gray-900">
-                                                {p.nombre || "Psicólogo sin nombre"}
+                                                {getNombreCompleto(p)}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-600">
                                                 {p.email}
@@ -670,13 +703,26 @@ const Admin = () => {
             {/* --- DETALLES POR PSICÓLOGO --- */}
             <div className="mb-8">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                    <h2 className="text-2xl font-bold text-gray-700 flex items-center">
+                    <h2 className="text-2xl font-bold text-gray-700 flex items-center gap-2">
                         <Calendar className="h-6 w-6 mr-2 text-blue-600" />
-                        Detalle de Reservas
+                        Detalle de Reservas 
+                        <span className="text-2xl font-bold text-gray-700 flex items-center">
+                            {getNombreMes(monthOffset)}
+                        </span>
                     </h2>
 
                     {/* 🔹 Filtros de mes (actual / siguiente) */}
                     <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setMonthOffset(-1)}
+                            className={`px-3 py-1 rounded-full text-sm font-semibold border transition ${monthOffset === -1
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"
+                                }`}
+                        >
+                            Mes anterior
+                        </button>
                         <button
                             type="button"
                             onClick={() => setMonthOffset(0)}
@@ -741,7 +787,7 @@ const Admin = () => {
                                     <div className="flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="text-lg font-bold text-gray-800">
-                                                {p.nombre || "Psicólogo sin nombre"}
+                                                {getNombreCompleto(p)}
                                             </span>
 
                                             <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-semibold uppercase">
@@ -762,7 +808,7 @@ const Admin = () => {
                                             type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation(); // no abrir/cerrar acordeón
-                                                handlePagarMesUsuario(p.id, p.nombre, hayDeudaMes);
+                                                handlePagarMesUsuario(p.id, getNombreCompleto(p), hayDeudaMes);
                                             }}
                                             className={`ml-2 px-3 py-3 rounded-md text-xs text-white font-semibold shadow
                         ${hayDeudaMes
@@ -770,9 +816,7 @@ const Admin = () => {
                                                     : "bg-red-600 hover:bg-red-700"         // 🔴 Marcar como deuda
                                                 }`}
                                         >
-                                            {hayDeudaMes
-                                                ? `Pagar ${monthLabel.toLowerCase()}`
-                                                : "Marcar como deuda"}
+                                            {hayDeudaMes ? "Pagar mes" : "Marcar como deuda"}
                                         </button>
                                     )}
                                     {isOpen ? (
