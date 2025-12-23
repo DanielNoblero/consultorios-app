@@ -198,14 +198,23 @@ const Admin = () => {
 
     // 🧠 Memo: orden de psicólogos (admin primero, luego psicólogos)
     const psicologosOrdenados = useMemo(() => {
-        return [...psicologos].sort((a, b) => {
-            if (a.rol === "admin") return -1;
-            if (b.rol === "admin") return 1;
-            if (a.rol === "psicologo") return -1;
-            if (b.rol === "psicologo") return 1;
-            return 0;
-        });
-    }, [psicologos]);
+    return [...psicologos].sort((a, b) => {
+        // 1️⃣ Admins primero
+        if (a.rol === "admin" && b.rol !== "admin") return -1;
+        if (a.rol !== "admin" && b.rol === "admin") return 1;
+
+        // 2️⃣ Orden alfabético por nombre + apellido
+        const nombreA = `${a.nombre ?? ""} ${a.apellido ?? ""}`
+            .trim()
+            .toLowerCase();
+
+        const nombreB = `${b.nombre ?? ""} ${b.apellido ?? ""}`
+            .trim()
+            .toLowerCase();
+
+        return nombreA.localeCompare(nombreB, "es", { sensitivity: "base" });
+    });
+}, [psicologos]);
 
     // Label para saber qué mes se está viendo
     const monthLabel = monthOffset === -1 ? "Mes anterior" : monthOffset === 0 ? "Mes actual" : "Mes siguiente";
