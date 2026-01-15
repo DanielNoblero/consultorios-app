@@ -2,7 +2,7 @@
 // index.js COMPLETO (Firebase Functions V2) — REPORTE + LIMPIEZA
 // -------------------------------------------------------------
 
-const { onRequest, onCall } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const ExcelJS = require("exceljs");
@@ -235,7 +235,7 @@ exports.asignarRolAdmin = onCall(async (request) => {
     try {
         // 🔐 Validación correcta para múltiples admins
         if (request.auth?.token?.rol !== "admin") {
-            throw new Error(
+            throw new HttpsError(
                 "No autorizado: solo administradores pueden asignar roles."
             );
         }
@@ -243,7 +243,7 @@ exports.asignarRolAdmin = onCall(async (request) => {
         const email = request.data.email;
         const rol = request.data.rol || "admin";
 
-        if (!email) throw new Error("Email requerido");
+        if (!email) throw new HttpsError("Email requerido");
 
         const userRecord = await admin.auth().getUserByEmail(email);
 
@@ -258,6 +258,132 @@ exports.asignarRolAdmin = onCall(async (request) => {
         };
     } catch (error) {
         logger.error("Error asignando rol:", error);
-        throw new Error(error.message || "Error interno");
+        throw new HttpsError("internal", error.message || "Error interno");
     }
+});
+/* =============================================================
+   🗑️ ELIMINAR SERIE FUTURA CON BACKUP (CALLABLE)
+============================================================= */
+exports.eliminarSerieConBackup = onCall(async (request) => {
+    try {
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "No autenticado")
+        }
+
+        const { reservaId } = request.data;
+
+        if (!reservaId) {
+            throw new HttpsError("reservaId requerido");
+        }
+
+        // 🔍 Obtener reserva base
+        const baseRef = db.collection("reservas").doc(reservaId);
+        const baseSnap = await baseRef.get();
+
+        if (!baseSnap.exists) {
+            throw new HttpsError("not-found", "Reserva base no encontrada");
+        }
+
+        const base = baseSnap.data();
+
+        if (!base.groupId) {
+            throw new HttpsError("La reserva no pertenece a una serie");
+        }
+
+        const fechaBase = new Date(base.fecha + "T00:00:00");
+
+        // 🔎 Buscar TODA la serie
+        const snap = await db
+            .collection("reservas")
+            .where("groupId", "==", base.groupId)
+            .get();
+
+        const futuras = snap.docs.filter((doc) => {
+            const r = doc.data();
+            if (!r.fecha) return false;
+            const fechaReserva = new Date(r.fecha + "T00:00:00");
+            return fechaReserva >= fechaBase;
+        });
+
+        if (futuras.length === 0) {
+            return {
+                ok: false,
+                message: "No hay reservas futuras para eliminar",
+            };
+        }
+
+        const batch = db.batch();
+
+        for (const docSnap of futuras) {
+            const r = docSnap.data();
+
+            // 🔁 BACKUP
+            await db.collection("reservas_backup").add({
+                dataOriginal: { id: docSnap.id, ...r },
+                eliminadaPor: request.auth.uid,
+                eliminadaEn: admin.firestore.FieldValue.serverTimestamp(),
+                motivo: "cancelacion_serie",
+                restaurado: false,
+            });
+
+            // ❌ BORRAR
+            batch.delete(docSnap.ref);
+        }
+
+        await batch.commit();
+
+        return {
+            ok: true,
+            tipo: "serie-futura",
+            cantidad: futuras.length,
+        };
+
+    } catch (error) {
+        logger.error("Error eliminarSerieConBackup:", error);
+        throw new HttpsError("internal", error.message || "Error interno");
+    }
+});
+
+exports.eliminarReservaConBackup = onCall(async (request) => {
+    const { reservaId } = request.data;
+    const user = request.auth;
+
+    if (!user) {
+        throw new HttpsError("unauthenticated", "No autenticado");
+    }
+
+    const userSnap = await admin
+        .firestore()
+        .doc(`usuarios/${user.uid}`)
+        .get();
+
+    if (!userSnap.exists || userSnap.data().rol !== "admin") {
+        throw new HttpsError("permission-denied", "Solo admin");
+    }
+
+    const reservaRef = admin.firestore().doc(`reservas/${reservaId}`);
+    const reservaSnap = await reservaRef.get();
+
+    if (!reservaSnap.exists) {
+        throw new HttpsError("not-found", "Reserva no encontrada");
+    }
+
+    const data = reservaSnap.data();
+
+    // ✅ BACKUP UNIFICADO
+    await admin.firestore().collection("reservas_backup").add({
+        dataOriginal: {
+            id: reservaId,
+            ...data,
+        },
+        eliminadoPor: "admin",
+        eliminadoPorId: user.uid,
+        eliminadoEn: admin.firestore.FieldValue.serverTimestamp(),
+        motivo: "eliminacion_admin",
+        restaurado: false,
+    });
+
+    await reservaRef.delete();
+
+    return { ok: true };
 });

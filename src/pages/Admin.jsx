@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 import { marcarMesPagadoUsuario, marcarMesDeudaUsuario, } from "../utils/pagosUtils";
-
+import { getFunctions, httpsCallable } from "firebase/functions";
 const CONFIG_DOC_ID = "precioConsulta";
 
 // ============================
@@ -286,21 +286,34 @@ const Admin = () => {
     const calcularDeudaDelMes = (psicologoId) =>
         parseFloat(deudaPorPsicologo[psicologoId] || 0).toFixed(2);
 
-    const handleEliminar = async (id) => {
-        openModal(
-            "Eliminar Reserva",
-            "¿Seguro que deseas eliminar esta reserva?",
-            async () => {
-                try {
-                    await deleteDoc(doc(db, "reservas", id));
-                    openModal("🗑️ Eliminada", "Reserva eliminada correctamente.");
-                } catch (error) {
-                    console.error(error);
-                    openModal("❌ Error", "Error al eliminar la reserva.");
-                }
+    const handleEliminar = async (reservaId) => {
+    openModal(
+        "Eliminar Reserva",
+        "⚠️ Esta acción eliminará la reserva y generará un backup. ¿Deseas continuar?",
+        async () => {
+            try {
+                const functions = getFunctions();
+                const eliminarReserva = httpsCallable(functions, "eliminarReservaConBackup");
+
+                await eliminarReserva({
+                    reservaId,
+                    motivo: "Eliminación manual desde panel admin"
+                });
+
+                openModal(
+                    "🗑️ Reserva eliminada",
+                    "La reserva fue eliminada y guardada en el backup correctamente."
+                );
+            } catch (error) {
+                console.error(error);
+                openModal(
+                    "❌ Error",
+                    "No se pudo eliminar la reserva."
+                );
             }
-        );
-    };
+        }
+    );
+};
 
     const generarReporte = async () => {
         try {

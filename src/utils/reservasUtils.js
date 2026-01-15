@@ -14,10 +14,11 @@ import {
     getDoc,
     addDoc,
     updateDoc,
-    deleteDoc
+    deleteDoc,
+    serverTimestamp,
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
-
+import { getFunctions, httpsCallable } from "firebase/functions";
 // =====================================================
 // PRECIOS CONFIGURADOS
 // =====================================================
@@ -309,34 +310,105 @@ export const confirmarReserva = async ({
 // =====================================================
 // ELIMINAR RESERVAS (UNA O TODA LA SERIE)
 // =====================================================
-export const eliminarReserva = async (reserva, eliminarSerie = false) => {
-    if (!reserva) return;
+export const eliminarReserva = async (
+    reserva,
+    eliminarSerie = false,
+    user
+) => {
+    if (!reserva || !user) return;
 
     try {
-        // Si no es recurrente → borrar solo una
+        // ---------------------------------------------
+        // BORRAR UNA SOLA
+        // ---------------------------------------------
         if (!reserva.groupId || !eliminarSerie) {
+            await backupReserva(reserva, user);
             await deleteDoc(doc(db, "reservas", reserva.id));
             return { ok: true, tipo: "una" };
         }
 
-        // 🔥 Si es recurrente y quiere borrar TODA la serie
-        const q = query(
-            collection(db, "reservas"),
-            where("groupId", "==", reserva.groupId)
-        );
+       // ---------------------------------------------
+// BORRAR SERIE → SOLO FUTURAS (CORREGIDO)
+// ---------------------------------------------
+const q = query(
+    collection(db, "reservas"),
+    where("groupId", "==", reserva.groupId)
+);
 
-        const snap = await getDocs(q);
+const snap = await getDocs(q);
 
-        const batchDeletes = snap.docs.map((d) =>
-            deleteDoc(doc(db, "reservas", d.id))
-        );
+const fechaBase = new Date(`${reserva.fecha}T00:00:00`);
 
-        await Promise.all(batchDeletes);
+const futuras = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(r => {
+        const fechaReserva = new Date(`${r.fecha}T00:00:00`);
+        return fechaReserva >= fechaBase;
+    });
 
-        return { ok: true, tipo: "serie" };
+if (futuras.length === 0) {
+    console.warn("No se encontraron reservas futuras para borrar");
+    return { ok: false, motivo: "sin-reservas-futuras" };
+}
 
+// 🔐 BACKUP
+await Promise.all(
+    futuras.map(r => backupReserva(r, user))
+);
+
+// ❌ BORRADO
+await Promise.all(
+    futuras.map(r =>
+        deleteDoc(doc(db, "reservas", r.id))
+    )
+);
+
+return {
+    ok: true,
+    tipo: "serie-futura",
+    cantidad: futuras.length
+};
+
+} catch (error) {
+    console.error("Error eliminando reserva(s):", error);
+    return { ok: false, error };
+}
+};
+
+// ---------------------------------------------
+// FUNCIÓN HELPER → GUARDAR BACKUP
+// ---------------------------------------------
+const backupReserva = async (reserva, user) => {
+    if (!user || user.rol === "admin") return;
+
+    try {
+        await addDoc(collection(db, "reservas_backup"), {
+            reservaIdOriginal: reserva.id,
+            psicologoId: reserva.psicologoId,
+            eliminadoPor: "psicologo",
+            eliminadoPorId: user.uid,
+            eliminadoEn: serverTimestamp(),
+            motivo: "cancelacion_psicologo",
+            dataOriginal: reserva
+        });
+    } catch (e) {
+        console.error("Error guardando backup de reserva:", e);
+    }
+};
+
+// =====================================================
+// 🗑️ ELIMINAR RESERVA CON BACKUP (CLOUD FUNCTION)
+// SOLO ADMIN
+// =====================================================
+export const eliminarReservaConBackupCF = async (reservaId) => {
+    try {
+        const functions = getFunctions();
+        const eliminar = httpsCallable(functions, "eliminarReservaConBackup");
+
+        const res = await eliminar({ reservaId });
+        return res.data;
     } catch (error) {
-        console.error("Error eliminando reserva(s):", error);
-        return { ok: false, error };
+        console.error("Error Cloud Function eliminarReservaConBackup:", error);
+        throw error;
     }
 };

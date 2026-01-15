@@ -1,8 +1,11 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- FUNCIONES ---
+    // --------------------------------------------------
+    // FUNCIONES
+    // --------------------------------------------------
     function isLoggedIn() {
       return request.auth != null;
     }
@@ -12,21 +15,20 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isLoggedIn() &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == "admin";
+      return isLoggedIn()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == "admin";
     }
 
-     // --- USUARIOS ---
+    // --------------------------------------------------
+    // USUARIOS
+    // --------------------------------------------------
     match /usuarios/{uid} {
 
-      // Crear solo su propio documento
       allow create: if isOwner(uid);
 
-      // 🔥 Leer: cualquier usuario autenticado
-      // Necesario para que /reservas pueda mostrar iniciales de otros psicólogos
       allow read: if isLoggedIn();
 
-      // Actualizar: dueño (excepto rol) o admin
       allow update: if
         (
           isOwner(uid) &&
@@ -34,34 +36,57 @@ service cloud.firestore {
         )
         || isAdmin();
 
-      // Nunca borrar usuarios desde el frontend
       allow delete: if false;
     }
 
-    // --- CONFIGURACIÓN (precioConsulta) ---
+    // --------------------------------------------------
+    // CONFIGURACIÓN
+    // --------------------------------------------------
     match /configuracion/{docId} {
-      allow read: if isLoggedIn();     // psicólogos y admin leen
-      allow write: if isAdmin();       // solo admin modifica
+      allow read: if isLoggedIn();
+      allow write: if isAdmin();
     }
 
-    // --- RESERVAS ---
+    // --------------------------------------------------
+    // RESERVAS
+    // --------------------------------------------------
     match /reservas/{reservaId} {
 
-      // Crear: solo si el psicólogo dueño crea su propia reserva
-      allow create: if isLoggedIn() &&
-                    request.resource.data.psicologoId == request.auth.uid;
+      allow create: if isLoggedIn()
+        && request.resource.data.psicologoId == request.auth.uid;
 
-      // Leer: cualquier usuario autenticado
       allow read: if isLoggedIn();
 
-      // Actualizar y borrar: dueño o admin
-      allow update, delete: if isLoggedIn() &&
-               (request.auth.uid == resource.data.psicologoId || isAdmin());
+      allow update, delete: if isLoggedIn()
+        && (
+          request.auth.uid == resource.data.psicologoId
+          || isAdmin()
+        );
     }
 
-    // --- TABLA ADMIN ---
+    // --------------------------------------------------
+    // PANEL ADMIN
+    // --------------------------------------------------
     match /admin/{docId} {
       allow read, write: if isAdmin();
+    }
+
+    // --------------------------------------------------
+    // BACKUP DE RESERVAS ELIMINADAS
+    // --------------------------------------------------
+    match /reservas_backup/{backupId} {
+
+      // 🔐 Solo admin puede leer backups
+      allow read: if isAdmin();
+
+      // ✍️ Se crean automáticamente al borrar reservas
+      allow create: if isLoggedIn();
+
+      // 🟡 Solo admin puede marcar como restaurado
+      allow update: if isAdmin();
+
+      // ❌ Nunca se borran
+      allow delete: if false;
     }
   }
 }

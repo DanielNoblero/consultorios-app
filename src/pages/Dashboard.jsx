@@ -351,7 +351,7 @@ const Dashboard = () => {
         }
 
         try {
-            await eliminarReserva(reservaACancelar, false);
+            await eliminarReserva(reservaACancelar, false, user);
             mostrarNotificacion(
                 "success",
                 "✅ Reserva cancelada correctamente."
@@ -399,7 +399,7 @@ const Dashboard = () => {
 
     const eliminarSoloUna = async () => {
         try {
-            await eliminarReserva(modalRecurrente, false);
+            await eliminarReserva(modalRecurrente, false, user);
             setModalRecurrente(null);
             mostrarNotificacion(
                 "success",
@@ -413,7 +413,7 @@ const Dashboard = () => {
 
     const eliminarTodaLaSerie = async () => {
         try {
-            await eliminarReserva(modalRecurrente, true);
+            await eliminarReserva(modalRecurrente, true, user);
             setModalRecurrente(null);
             mostrarNotificacion(
                 "success",

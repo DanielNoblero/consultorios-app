@@ -128,6 +128,9 @@ export default function Navbar() {
                                         Admin
                                     </Link>
                                 )}
+                                {role === "admin" && (
+                                    <Link to="/admin/backups" className="px-4 py-2 bg-yellow-200 text-yellow-900 font-semibold rounded-lg border border-yellow-400 shadow-sm hover:bg-yellow-300 transition">Reservas eliminadas</Link>
+                                )}
                             </>
                         )}
 
@@ -195,6 +198,9 @@ export default function Navbar() {
                                                 Admin
                                             </Link>
                                         )}
+                                        {role === "admin" && (
+                                    <Link to="/admin/backups" className="w-full text-center py-2 bg-white/70 hover:bg-white rounded-lg transition shadow-sm">Reservas eliminadas</Link>
+                                )}
                                     </>
                                 )}
 

@@ -5,7 +5,7 @@ import Nav from "./components/Navbar.jsx";
 import Login from "./components/Login.jsx";
 import Register from "./components/Register.jsx";
 import Perfil from "./components/Perfil.jsx";
-
+import AdminBackups from "./pages/AdminBackups.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Reservas from "./pages/Reservas.jsx";
 import Admin from "./pages/Admin.jsx";
@@ -50,6 +50,7 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route path="/admin/backups" element={<AdminBackups />} />
 
         {/* ------------------ RESERVAS ------------------ */}
         <Route
