@@ -324,55 +324,78 @@ export const eliminarReserva = async (
         if (!reserva.groupId || !eliminarSerie) {
             await backupReserva(reserva, user);
             await deleteDoc(doc(db, "reservas", reserva.id));
+
+            // ♻️ RECALCULAR SEMANA AFECTADA
+            await recalcularPreciosSemana(
+                reserva.psicologoId,
+                new Date(`${reserva.fecha}T00:00:00`)
+            );
+
             return { ok: true, tipo: "una" };
         }
 
-       // ---------------------------------------------
-// BORRAR SERIE → SOLO FUTURAS (CORREGIDO)
-// ---------------------------------------------
-const q = query(
-    collection(db, "reservas"),
-    where("groupId", "==", reserva.groupId)
-);
+        // ---------------------------------------------
+        // BORRAR SERIE → SOLO FUTURAS (CORREGIDO)
+        // ---------------------------------------------
+        const q = query(
+            collection(db, "reservas"),
+            where("groupId", "==", reserva.groupId)
+        );
 
-const snap = await getDocs(q);
+        const snap = await getDocs(q);
 
-const fechaBase = new Date(`${reserva.fecha}T00:00:00`);
+        const fechaBase = new Date(`${reserva.fecha}T00:00:00`);
 
-const futuras = snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(r => {
-        const fechaReserva = new Date(`${r.fecha}T00:00:00`);
-        return fechaReserva >= fechaBase;
-    });
+        const futuras = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(r => {
+                const fechaReserva = new Date(`${r.fecha}T00:00:00`);
+                return fechaReserva >= fechaBase;
+            });
 
-if (futuras.length === 0) {
-    console.warn("No se encontraron reservas futuras para borrar");
-    return { ok: false, motivo: "sin-reservas-futuras" };
-}
+        if (futuras.length === 0) {
+            console.warn("No se encontraron reservas futuras para borrar");
+            return { ok: false, motivo: "sin-reservas-futuras" };
+        }
 
-// 🔐 BACKUP
-await Promise.all(
-    futuras.map(r => backupReserva(r, user))
-);
+        // 🔐 BACKUP
+        await Promise.all(
+            futuras.map(r => backupReserva(r, user))
+        );
 
-// ❌ BORRADO
-await Promise.all(
-    futuras.map(r =>
-        deleteDoc(doc(db, "reservas", r.id))
-    )
-);
+        // ❌ BORRADO
+        await Promise.all(
+            futuras.map(r =>
+                deleteDoc(doc(db, "reservas", r.id))
+            )
+        );
 
-return {
-    ok: true,
-    tipo: "serie-futura",
-    cantidad: futuras.length
-};
+        const semanasAfectadas = new Set();
 
-} catch (error) {
-    console.error("Error eliminando reserva(s):", error);
-    return { ok: false, error };
-}
+        futuras.forEach(r => {
+            const lunes = getMonday(new Date(`${r.fecha}T00:00:00`)).toISOString();
+            semanasAfectadas.add(lunes);
+        });
+
+        await Promise.all(
+            Array.from(semanasAfectadas).map(lunesISO =>
+                recalcularPreciosSemana(
+                    reserva.psicologoId,
+                    new Date(lunesISO)
+                )
+            )
+        );
+
+        return {
+            ok: true,
+            tipo: "serie-futura",
+            cantidad: futuras.length
+        };
+
+    } catch (error) {
+        console.error("Error eliminando reserva(s):", error);
+        return { ok: false, error };
+    }
 };
 
 // ---------------------------------------------
@@ -411,4 +434,39 @@ export const eliminarReservaConBackupCF = async (reservaId) => {
         console.error("Error Cloud Function eliminarReservaConBackup:", error);
         throw error;
     }
+};
+// =====================================================
+// ♻️ RECALCULAR PRECIOS DE UNA SEMANA (POR CAMBIO DE TARIFAS)
+// =====================================================
+
+export const recalcularPreciosSemana = async (psicologoId, fechaReferencia) => {
+    const { precioBase, precioDescuento } = await getPreciosConfig();
+
+    const lunes = getMonday(fechaReferencia);
+    const domingo = getSunday(fechaReferencia);
+
+    const q = query(
+        collection(db, "reservas"),
+        where("psicologoId", "==", psicologoId)
+    );
+
+    const snap = await getDocs(q);
+
+    const semana = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(r => {
+            const f = new Date(`${r.fecha}T00:00:00`);
+            return f >= lunes && f <= domingo;
+        });
+
+    const descuento = semana.length >= 10;
+    const nuevoPrecio = descuento ? precioDescuento : precioBase;
+
+    await Promise.all(
+        semana.map(r =>
+            updateDoc(doc(db, "reservas", r.id), {
+                precio: nuevoPrecio
+            })
+        )
+    );
 };
