@@ -175,7 +175,7 @@ const Admin = () => {
             if (!reservasMap[psicologoId]) reservasMap[psicologoId] = [];
             reservasMap[psicologoId].push(r);
 
-            if (!r.pagado) {
+            if (!r.pagado && precio > 0) {
                 deudaMap[psicologoId] = (deudaMap[psicologoId] || 0) + precio;
             }
         });
@@ -198,23 +198,23 @@ const Admin = () => {
 
     // 🧠 Memo: orden de psicólogos (admin primero, luego psicólogos)
     const psicologosOrdenados = useMemo(() => {
-    return [...psicologos].sort((a, b) => {
-        // 1️⃣ Admins primero
-        if (a.rol === "admin" && b.rol !== "admin") return -1;
-        if (a.rol !== "admin" && b.rol === "admin") return 1;
+        return [...psicologos].sort((a, b) => {
+            // 1️⃣ Admins primero
+            if (a.rol === "admin" && b.rol !== "admin") return -1;
+            if (a.rol !== "admin" && b.rol === "admin") return 1;
 
-        // 2️⃣ Orden alfabético por nombre + apellido
-        const nombreA = `${a.nombre ?? ""} ${a.apellido ?? ""}`
-            .trim()
-            .toLowerCase();
+            // 2️⃣ Orden alfabético por nombre + apellido
+            const nombreA = `${a.nombre ?? ""} ${a.apellido ?? ""}`
+                .trim()
+                .toLowerCase();
 
-        const nombreB = `${b.nombre ?? ""} ${b.apellido ?? ""}`
-            .trim()
-            .toLowerCase();
+            const nombreB = `${b.nombre ?? ""} ${b.apellido ?? ""}`
+                .trim()
+                .toLowerCase();
 
-        return nombreA.localeCompare(nombreB, "es", { sensitivity: "base" });
-    });
-}, [psicologos]);
+            return nombreA.localeCompare(nombreB, "es", { sensitivity: "base" });
+        });
+    }, [psicologos]);
 
     // Label para saber qué mes se está viendo
     const monthLabel = monthOffset === -1 ? "Mes anterior" : monthOffset === 0 ? "Mes actual" : "Mes siguiente";
@@ -287,33 +287,33 @@ const Admin = () => {
         parseFloat(deudaPorPsicologo[psicologoId] || 0).toFixed(2);
 
     const handleEliminar = async (reservaId) => {
-    openModal(
-        "Eliminar Reserva",
-        "⚠️ Esta acción eliminará la reserva y generará un backup. ¿Deseas continuar?",
-        async () => {
-            try {
-                const functions = getFunctions();
-                const eliminarReserva = httpsCallable(functions, "eliminarReservaConBackup");
+        openModal(
+            "Eliminar Reserva",
+            "⚠️ Esta acción eliminará la reserva y generará un backup. ¿Deseas continuar?",
+            async () => {
+                try {
+                    const functions = getFunctions();
+                    const eliminarReserva = httpsCallable(functions, "eliminarReservaConBackup");
 
-                await eliminarReserva({
-                    reservaId,
-                    motivo: "Eliminación manual desde panel admin"
-                });
+                    await eliminarReserva({
+                        reservaId,
+                        motivo: "Eliminación manual desde panel admin"
+                    });
 
-                openModal(
-                    "🗑️ Reserva eliminada",
-                    "La reserva fue eliminada y guardada en el backup correctamente."
-                );
-            } catch (error) {
-                console.error(error);
-                openModal(
-                    "❌ Error",
-                    "No se pudo eliminar la reserva."
-                );
+                    openModal(
+                        "🗑️ Reserva eliminada",
+                        "La reserva fue eliminada y guardada en el backup correctamente."
+                    );
+                } catch (error) {
+                    console.error(error);
+                    openModal(
+                        "❌ Error",
+                        "No se pudo eliminar la reserva."
+                    );
+                }
             }
-        }
-    );
-};
+        );
+    };
 
     const generarReporte = async () => {
         try {
@@ -727,7 +727,7 @@ const Admin = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                     <h2 className="text-2xl font-bold text-gray-700 flex items-center gap-2">
                         <Calendar className="h-6 w-6 mr-2 text-blue-600" />
-                        Detalle de Reservas 
+                        Detalle de Reservas
                         <span className="text-2xl font-bold text-gray-700 flex items-center">
                             {getNombreMes(monthOffset)}
                         </span>

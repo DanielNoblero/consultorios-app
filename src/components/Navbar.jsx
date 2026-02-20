@@ -116,10 +116,12 @@ export default function Navbar() {
 
                         {user && isProfileComplete && (
                             <>
+                                <Link to="/" className={linkBase}>
+                                    Mis Reservar
+                                </Link>
                                 <Link to="/reservas" className={linkBase}>
                                     Reservar
                                 </Link>
-
                                 {role === "admin" && (
                                     <Link
                                         to="/admin"
@@ -181,6 +183,13 @@ export default function Navbar() {
                             <div className="flex flex-col space-y-2 text-blue-900 font-semibold">
                                 {user && isProfileComplete && (
                                     <>
+                                    <Link
+                                            to="/"
+                                            onClick={() => setIsOpen(false)}
+                                            className="w-full text-center py-2 bg-white/70 hover:bg-white rounded-lg transition shadow-sm"
+                                        >
+                                            Mis Reservar
+                                        </Link>
                                         <Link
                                             to="/reservas"
                                             onClick={() => setIsOpen(false)}
@@ -199,8 +208,8 @@ export default function Navbar() {
                                             </Link>
                                         )}
                                         {role === "admin" && (
-                                    <Link to="/admin/backups" className="w-full text-center py-2 bg-white/70 hover:bg-white rounded-lg transition shadow-sm">Reservas eliminadas</Link>
-                                )}
+                                            <Link to="/admin/backups" className="w-full text-center py-2 bg-white/70 hover:bg-white rounded-lg transition shadow-sm">Reservas eliminadas</Link>
+                                        )}
                                     </>
                                 )}
 

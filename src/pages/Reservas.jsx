@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getISOWeek } from "date-fns";
 
 import { useAuth } from "../context/AuthContext";
-import { getPrecioBase } from "../utils/precioUtils";
+import { getPreciosConfig  } from "../utils/precioUtils";
 import { generarHorarios } from "../utils/horariosUtils";
 import { getIniciales } from "../utils/userUtils";
 import { traerReservas, traerReservasUsuario } from "../utils/reservasUtils";
@@ -64,7 +64,7 @@ const Reservas = () => {
     // PRECIO GLOBAL
     // ---------------------------------------------------
     const cargarPrecioBase = useCallback(async () => {
-        const precio = await getPrecioBase();
+        const precio = await getPreciosConfig ();
         setPrecioBase(precio);
     }, []);
 

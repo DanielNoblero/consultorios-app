@@ -2,25 +2,27 @@
 import { db } from "../firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 
-/**
- * Obtiene el precio base desde configuracion/precioConsulta
- */
-export const getPrecioBase = async () => {
+export const getPreciosConfig = async () => {
   try {
     const docRef = doc(db, "configuracion", "precioConsulta");
     const snapshot = await getDoc(docRef);
 
     if (snapshot.exists()) {
       const data = snapshot.data();
-      // Intentamos primero precioBase, luego un posible campo viejo "precio"
-      const valor = data.precioBase ?? data.precio;
-      const num = parseFloat(valor);
-      return Number.isNaN(num) ? 250 : num;
+
+      return {
+        precioBase: parseFloat(data.precioBase ?? 250),
+        precioDescuento: parseFloat(data.precioDescuento ?? 230),
+        fechaCambioPrecio: data.fechaCambioPrecio ?? "1900-01-01"
+      };
     }
   } catch (error) {
-    console.error("Error al obtener el precio base:", error);
+    console.error("Error al obtener precios:", error);
   }
 
-  // Fallback por si algo falla
-  return 250;
+  return {
+    precioBase: 250,
+    precioDescuento: 230,
+    fechaCambioPrecio: "1900-01-01"
+  };
 };
