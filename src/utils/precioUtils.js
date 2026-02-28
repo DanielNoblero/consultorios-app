@@ -13,7 +13,7 @@ export const getPreciosConfig = async () => {
       return {
         precioBase: parseFloat(data.precioBase ?? 250),
         precioDescuento: parseFloat(data.precioDescuento ?? 230),
-        fechaCambioPrecio: data.fechaCambioPrecio ?? "1900-01-01"
+        fechaCambio: data.fechaCambio ?? "1900-01-01"
       };
     }
   } catch (error) {
@@ -23,6 +23,6 @@ export const getPreciosConfig = async () => {
   return {
     precioBase: 250,
     precioDescuento: 230,
-    fechaCambioPrecio: "1900-01-01"
+    fechaCambio: "1900-01-01"
   };
 };

@@ -100,7 +100,7 @@ export const AuthProvider = ({ children }) => {
                             uid: firebaseUser.uid,
                             email: firebaseUser.email,
                             displayName: firebaseUser.displayName || null,
-                            rol: "usuario",
+                            rol: "psicologo",
                             perfilCompleto: false,
                             isAdmin: false,
                         });
@@ -115,7 +115,7 @@ export const AuthProvider = ({ children }) => {
                     uid: firebaseUser.uid,
                     email: firebaseUser.email,
                     displayName: firebaseUser.displayName || null,
-                    rol: "usuario",
+                    rol: "psicologo",
                     perfilCompleto: false,
                     isAdmin: false,
                 });

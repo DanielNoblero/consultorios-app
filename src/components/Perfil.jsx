@@ -69,12 +69,11 @@ const Perfil = () => {
         setErrorMsg("");
 
         try {
-            // 🔹 Si cambió el email, actualizar en Firebase Auth
+            // 🔹 Actualizar email en Auth si cambió
             if (form.email !== user.email) {
                 try {
                     await updateEmail(user, form.email);
                 } catch (err) {
-                    console.error(err);
                     if (err.code === "auth/requires-recent-login") {
                         setErrorMsg("Debes cerrar sesión y volver a iniciar sesión para cambiar tu email.");
                     } else {
@@ -85,23 +84,39 @@ const Perfil = () => {
                 }
             }
 
-            // 🔹 Guardar perfil en Firestore
             const userRef = doc(db, "usuarios", user.uid);
+            const snap = await getDoc(userRef);
 
-            await setDoc(
-                userRef,
-                {
+            if (!snap.exists()) {
+                // 🔥 Usuario nuevo → crear documento completo
+                await setDoc(userRef, {
                     nombre: form.nombre,
                     apellido: form.apellido,
                     telefono: form.telefono,
                     email: form.email,
+                    rol: "psicologo",
                     perfilCompleto: true,
+                    createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
-                },
-                { merge: true }
-            );
+                });
+            } else {
+                // ✅ Usuario existente → solo actualizar
+                await setDoc(
+                    userRef,
+                    {
+                        nombre: form.nombre,
+                        apellido: form.apellido,
+                        telefono: form.telefono,
+                        email: form.email,
+                        perfilCompleto: true,
+                        updatedAt: new Date().toISOString(),
+                    },
+                    { merge: true }
+                );
+            }
 
             navigate("/dashboard");
+
         } catch (error) {
             console.error("Error guardando el perfil:", error);
             setErrorMsg("Hubo un error guardando el perfil.");

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import PrivateRoute from "./routes/PrivateRoute";
-
+import useCambioPrecio from "./utils/useCambioPrecio";
+import PriceUpdateModal from "./components/PriceUpdateModal";
 import Nav from "./components/Navbar.jsx";
 import Login from "./components/Login.jsx";
 import Register from "./components/Register.jsx";
@@ -11,8 +12,19 @@ import Reservas from "./pages/Reservas.jsx";
 import Admin from "./pages/Admin.jsx";
 
 function App() {
+  const { mostrarModal, precioData, aceptarCambio } = useCambioPrecio();
+
   return (
     <Router>
+      {mostrarModal && precioData && (
+        <PriceUpdateModal
+          precioBase={precioData.precioBase}
+          precioDescuento={precioData.precioDescuento}
+          fechaCambio={precioData.fechaCambio}
+          onAccept={aceptarCambio}
+        />
+      )}
+      
       <Nav />
 
       <Routes>
