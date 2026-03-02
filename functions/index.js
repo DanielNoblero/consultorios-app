@@ -240,37 +240,38 @@ exports.recalcularAlCambiarReserva = onDocumentWritten({ document: "reservas/{re
 exports.recalcularPreciosAlCambiarConfig = onDocumentUpdated(
     { document: "configuracion/precioConsulta", region: "southamerica-east1" },
     async (event) => {
-        const after = event.data?.after?.data() || {};
-        const precioBase = Number(after.precioBase || 250);
-        const precioDescuento = Number(after.precioDescuento || 230);
-
         const hoyStr = new Date().toISOString().split("T")[0];
 
-        // 🔹 Traer todas las reservas FUTURAS y NO PAGADAS
+        // 1. Buscamos todas las reservas futuras que no estén pagadas
         const reservasSnap = await db.collection("reservas")
             .where("fecha", ">=", hoyStr)
             .where("pagado", "==", false)
             .get();
 
-        let totalActualizadas = 0;
-        const updates = [];
+        if (reservasSnap.empty) return;
 
-        reservasSnap.docs.forEach(doc => {
+        // 2. Agrupamos qué semanas necesita recalcular cada psicólogo
+        // Usamos un Set para no repetir el recalculo de la misma semana
+        const tareas = {}; 
+
+        reservasSnap.forEach(doc => {
             const r = doc.data();
-            const nuevoPrecio = r.cantidad >= 10 ? precioDescuento : precioBase;
-            if (Number(r.precio) !== nuevoPrecio) {
-                updates.push({ ref: doc.ref, precio: nuevoPrecio });
-            }
+            if (!r.psicologoId || !r.fecha) return;
+
+            // Obtenemos el lunes de esa reserva para identificar la semana
+            const lunes = getMonday(new Date(`${r.fecha}T00:00:00`)).toISOString().split("T")[0];
+            
+            if (!tareas[r.psicologoId]) tareas[r.psicologoId] = new Set();
+            tareas[r.psicologoId].add(lunes);
         });
 
-        // 🔹 Actualizar en batches de 400
-        for (let i = 0; i < updates.length; i += 400) {
-            const batch = db.batch();
-            updates.slice(i, i + 400).forEach(u => batch.update(u.ref, { precio: u.precio }));
-            await batch.commit();
-            totalActualizadas += updates.slice(i, i + 400).length;
+        // 3. Ejecutamos el recalculo para cada psicólogo en cada semana afectada
+        for (const psicologoId in tareas) {
+            for (const lunesStr of tareas[psicologoId]) {
+                console.log(`Recalculando Psico: ${psicologoId} - Semana: ${lunesStr}`);
+                // Llamamos a tu motor de precios para esa semana específica
+                await recalcularSemana(db, psicologoId, lunesStr);
+            }
         }
-
-        console.log(`Recalculo de precios aplicado a reservas futuras no pagadas. Total actualizadas: ${totalActualizadas}`);
     }
 );

@@ -246,12 +246,16 @@ const Admin = () => {
     const handleGuardarPrecio = async () => {
         setIsSavingPrice(true);
         try {
+            const hoy = new Date().toISOString().split("T")[0]; // Formato YYYY-MM-DD
             const ref = doc(db, "configuracion", CONFIG_DOC_ID);
+
             await setDoc(
                 ref,
                 {
                     precioBase: parseFloat(precioConsulta),
                     precioDescuento: parseFloat(precioDescuento),
+                    fechaCambio: hoy, // Importante para useCambioPrecio.js
+                    ultimaActualizacion: new Date().getTime(), // Asegura que el trigger de Cloud Functions siempre se dispare
                 },
                 { merge: true }
             );
