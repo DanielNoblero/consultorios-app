@@ -321,52 +321,47 @@ const Admin = () => {
 
     const generarReporte = async () => {
         try {
-            const url = "https://generarreportemanual-onau7gysfq-uc.a.run.app";
+            // 1. URL CORREGIDA: Apuntando a la región de Sao Paulo (-sa)
+            // Asegúrate de que este sea el ID exacto que te dio la consola de Firebase
+            const url = "https://generarreportemanual-onau7gysfq-rj.a.run.app";
+
             const response = await fetch(url);
 
             if (!response.ok) {
-                throw new Error("Error al generar el reporte");
+                throw new Error("Error en el servidor al generar el Excel");
             }
 
             const blob = await response.blob();
             const link = document.createElement("a");
             link.href = window.URL.createObjectURL(blob);
 
-            // 👇 Nombre dinámico: reporte-mes-año.xlsx (mes pasado)
+            // 2. Lógica de nombre del archivo (Mes Pasado)
             const ahora = new Date();
-            let mes = ahora.getMonth() - 1; // mes pasado
+            let mesIdx = ahora.getMonth() - 1;
             let anio = ahora.getFullYear();
 
-            if (mes < 0) {
-                mes = 11; // diciembre
-                anio = anio - 1; // año anterior
+            if (mesIdx < 0) {
+                mesIdx = 11;
+                anio -= 1;
             }
 
             const nombresMes = [
-                "enero",
-                "febrero",
-                "marzo",
-                "abril",
-                "mayo",
-                "junio",
-                "julio",
-                "agosto",
-                "setiembre",
-                "octubre",
-                "noviembre",
-                "diciembre",
+                "enero", "febrero", "marzo", "abril", "mayo", "junio",
+                "julio", "agosto", "setiembre", "octubre", "noviembre", "diciembre"
             ];
 
-            const nombreMes = nombresMes[mes];
+            const nombreMes = nombresMes[mesIdx];
             link.download = `reporte-${nombreMes}-${anio}.xlsx`;
 
             link.click();
+            window.URL.revokeObjectURL(link.href);
+
         } catch (error) {
-            console.error(error);
-            openModal("❌ Error", "No se pudo generar el reporte mensual.");
+            console.error("Error reporte:", error);
+            // Usa tu función de modal habitual
+            openModal("❌ Error", "No se pudo generar el reporte. La función en la nube no respondió correctamente.");
         }
     };
-
     const togglePago = async (reserva) => {
         try {
             const ref = doc(db, "reservas", reserva.id);

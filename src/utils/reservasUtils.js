@@ -19,26 +19,7 @@ import {
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { getFunctions, httpsCallable } from "firebase/functions";
-// =====================================================
-// PRECIOS CONFIGURADOS
-// =====================================================
-export const getPreciosConfig = async () => {
-    try {
-        const ref = doc(db, "configuracion", "precioConsulta");
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            const data = snap.data();
-            return {
-                precioBase: parseFloat(data.precioBase || data.precio || 250),
-                precioDescuento: parseFloat(data.precioDescuento || 230),
-            };
-        }
-    } catch (error) {
-        console.error("Error al obtener precios configurados:", error);
-    }
-    return { precioBase: 250, precioDescuento: 230 };
-};
-
+import { getPreciosConfig } from "./precioUtils";
 // =====================================================
 // UTILIDADES DE FECHAS
 // =====================================================
@@ -269,10 +250,10 @@ export const confirmarReserva = async ({
         // =====================================================
         // DESCUENTO POR SEMANA (10+ reservas)
         // =====================================================
-        const todas = [...existentes, ...nuevas];
+        const todasParaConteo = [...existentes.filter(r => !r.pagado), ...nuevas];
         const semanas = {};
 
-        todas.forEach((r) => {
+        todasParaConteo.forEach((r) => {
             const lunes = getMonday(r.fechaObj).toISOString().split("T")[0];
             if (!semanas[lunes]) semanas[lunes] = [];
             semanas[lunes].push(r);
@@ -300,13 +281,15 @@ export const confirmarReserva = async ({
 
         // Actualizar precios de las reservas viejas si cambiaron
         await Promise.all(
-            existentes.map((r) => updateReservationPrice(r.id, r.precio))
+            existentes
+                .filter(r => !r.pagado)
+                .map((r) => updateReservationPrice(r.id, r.precio))
         );
+
     } catch (error) {
         console.error("ERROR confirmando reserva:", error);
     }
 };
-
 // =====================================================
 // ELIMINAR RESERVAS (UNA O TODA LA SERIE)
 // =====================================================
@@ -440,17 +423,15 @@ export const eliminarReservaConBackupCF = async (reservaId) => {
 // =====================================================
 
 export const recalcularPreciosSemana = async (psicologoId, fechaReferencia) => {
-    const { precioBase, precioDescuento } = await getPreciosConfig();
+    const { precioBase, precioDescuento, fechaCambio } = await getPreciosConfig();
 
     const lunes = getMonday(fechaReferencia);
     const domingo = getSunday(fechaReferencia);
 
-    const q = query(
+    const snap = await getDocs(query(
         collection(db, "reservas"),
         where("psicologoId", "==", psicologoId)
-    );
-
-    const snap = await getDocs(q);
+    ));
 
     const semana = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
@@ -459,14 +440,15 @@ export const recalcularPreciosSemana = async (psicologoId, fechaReferencia) => {
             return f >= lunes && f <= domingo;
         });
 
+    // ✅ Descuento basado en TODAS las reservas de la semana
     const descuento = semana.length >= 10;
     const nuevoPrecio = descuento ? precioDescuento : precioBase;
 
     await Promise.all(
-        semana.map(r =>
-            updateDoc(doc(db, "reservas", r.id), {
-                precio: nuevoPrecio
-            })
-        )
+        semana
+            .filter(r => !r.pagado)                                  // ✅ no tocar pagadas
+            .filter(r => !fechaCambio || r.fecha >= fechaCambio)     // ✅ respetar fechaCambio
+            .filter(r => r.precio !== nuevoPrecio)                   // ✅ evitar escrituras innecesarias
+            .map(r => updateDoc(doc(db, "reservas", r.id), { precio: nuevoPrecio }))
     );
 };

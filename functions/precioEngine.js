@@ -14,6 +14,9 @@ async function recalcularSemana(db, psicologoId, fechaReferencia) {
     const precioBase = Number(config.precioBase || 250);
     const precioDescuento = Number(config.precioDescuento || 230);
 
+    // ✅ Capturamos la fecha de cambio
+    const fechaCambio = config.fechaCambio || null;
+
     const lunes = getMonday(new Date(`${fechaReferencia}T00:00:00`));
     const lunesStr = lunes.toISOString().split("T")[0];
     const domingo = new Date(lunes);
@@ -45,13 +48,21 @@ async function recalcularSemana(db, psicologoId, fechaReferencia) {
                 reservasAdmin.push({ id: doc.id });
             }
         } else if (!r.pagado) {
-            reservasPsicologo.push({ id: doc.id, precioActual: Number(r.precio) });
+            // ✅ Todas van al conteo para el descuento
+            reservasPsicologo.push({
+                id: doc.id,
+                precioActual: Number(r.precio),
+                esAnteriorAlCambio: fechaCambio ? r.fecha < fechaCambio : false // ← marcamos cuáles no tocar
+            });
         }
     }
 
     const aplicaDescuento = reservasPsicologo.length >= 10;
     const nuevoPrecio = aplicaDescuento ? precioDescuento : precioBase;
-    const updatesPsicologo = reservasPsicologo.filter(r => r.precioActual !== nuevoPrecio);
+    const updatesPsicologo = reservasPsicologo.filter(r => 
+    !r.esAnteriorAlCambio &&        // no tocar las viejas
+    r.precioActual !== nuevoPrecio  // solo las que cambian
+);
 
     for (let i = 0; i < updatesPsicologo.length; i += 450) {
         const chunk = updatesPsicologo.slice(i, i + 450);

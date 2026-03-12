@@ -279,9 +279,10 @@ const Dashboard = () => {
             const nextMonth = (month + 1) % 12;
             setNombreMesSiguiente(meses[nextMonth]);
 
+            const ahora = new Date();
             const reservasMesActual = reservasArray.filter((r) => {
-                const f = new Date(`${r.fecha}T00:00:00`);
-                return f.getMonth() === month && f.getFullYear() === year;
+                const f = new Date(`${r.fecha}T${r.horaInicio}`);
+                return f.getMonth() === month && f.getFullYear() === year && f >= ahora;
             });
 
             const total = reservasMesActual.reduce(

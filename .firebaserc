@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "consultorio-4e6c5",
+    "default": "analysis-5abda",
     "prod": "analysis-5abda"
   },
   "targets": {},

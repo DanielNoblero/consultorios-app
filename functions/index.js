@@ -19,12 +19,15 @@ const db = admin.firestore();
 
 const { recalcularSemana, getMonday } = require("./precioEngine");
 
+
 // =============================================================
-// FUNCIÓN AUXILIAR: GENERAR EXCEL AGRUPADO POR PROFESIONAL
+// FUNCIÓN ÚNICA: GENERAR EXCEL AGRUPADO
 // =============================================================
 async function construirReporteExcel(snapshot) {
     const usuariosSnap = await db.collection("usuarios").get();
     const usersMap = {};
+
+    // Mapeo correcto: ID de documento -> Nombre y Apellido
     usuariosSnap.forEach((doc) => {
         const u = doc.data();
         usersMap[doc.id] = `${u.nombre || ""} ${u.apellido || ""}`.trim();
@@ -32,8 +35,8 @@ async function construirReporteExcel(snapshot) {
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Reporte Mensual");
-
     const reservasPorProfesional = {};
+
     snapshot.forEach((doc) => {
         const r = doc.data();
         const precio = Number(r.precio || 0);
@@ -41,14 +44,14 @@ async function construirReporteExcel(snapshot) {
 
         if (!estaPagada || precio <= 0) return;
 
-        const uid = r.usuarioId || r.userId || "sin-usuario";
+        // Aquí usamos psicologoId para agrupar
+        const uid = r.psicologoId || "sin-profesional";
         if (!reservasPorProfesional[uid]) reservasPorProfesional[uid] = [];
         reservasPorProfesional[uid].push(r);
     });
 
     if (Object.keys(reservasPorProfesional).length === 0) {
         sheet.addRow(["No hay reservas pagadas en este período."]);
-        sheet.getRow(1).font = { bold: true };
         return await workbook.xlsx.writeBuffer();
     }
 
@@ -63,77 +66,60 @@ async function construirReporteExcel(snapshot) {
         titulo.font = { bold: true, color: { argb: "FFFFFFFF" } };
         titulo.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4169E1" } };
 
-        const header = sheet.addRow(["Consultorio", "Fecha", "Hora Inicio", "Hora Fin", "Precio"]);
+        const header = sheet.addRow(["Consultorio", "Fecha", "Hora", "Precio"]);
         header.font = { bold: true };
-        header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
 
         let total = 0;
         reservas.forEach((r) => {
             const precio = Number(r.precio || 0);
-            sheet.addRow([r.consultorio || "", r.fecha || "", r.horaInicio || "", r.horaFin || "", precio]);
+            sheet.addRow([r.consultorio || "", r.fecha || "", `${r.horaInicio}-${r.horaFin}`, precio]);
             total += precio;
-            totalGeneral += precio;
         });
 
-        const totalRow = sheet.addRow([`TOTAL PROFESIONAL: ${total}`]);
-        totalRow.font = { bold: true, color: { argb: "FF006400" } };
-        totalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCFFCC" } };
+        totalGeneral += total;
+        sheet.addRow([`TOTAL PROFESIONAL: ${total}`]).font = { bold: true };
     });
 
     sheet.addRow([]);
-    const totalGrl = sheet.addRow([`TOTAL GENERAL GENERADO: ${totalGeneral}`]);
-    totalGrl.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    totalGrl.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF228B22" } };
+    sheet.addRow([`TOTAL GENERAL GENERADO: ${totalGeneral}`]).font = { bold: true };
 
     return await workbook.xlsx.writeBuffer();
 }
 
 // =============================================================
-// 1) GENERAR REPORTE MANUAL (Excel) + LIMPIEZA DEL MES PASADO
+// ENDPOINT DE REPORTE
 // =============================================================
 exports.generarReporteManual = onRequest({ cors: true, invoker: "public" }, async (req, res) => {
-    if (req.method === "OPTIONS") {
-        res.set("Access-Control-Allow-Origin", "*");
-        res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-        res.set("Access-Control-Allow-Headers", "*");
-        return res.status(204).send();
-    }
-
-    res.set("Access-Control-Allow-Origin", "*");
-    res.set("Access-Control-Allow-Headers", "*");
+    if (req.method === "OPTIONS") return res.status(204).send();
 
     try {
         const hoy = new Date();
-        const mesActual = hoy.getMonth();
-        const anioActual = hoy.getFullYear();
-        const mesPasado = mesActual === 0 ? 11 : mesActual - 1;
-        const anioMesPasado = mesActual === 0 ? anioActual - 1 : anioActual;
-        const inicioMesPasado = new Date(anioMesPasado, mesPasado, 1);
-        const finMesPasado = new Date(anioMesPasado, mesPasado + 1, 0, 23, 59, 59);
-        const inicioStr = inicioMesPasado.toISOString().split("T")[0];
-        const finStr = finMesPasado.toISOString().split("T")[0];
+        const mesPasado = hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1;
+        const anio = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
 
-        const snapshot = await db.collection("reservas").where("fecha", ">=", inicioStr).where("fecha", "<=", finStr).get();
+        const inicioStr = `${anio}-${String(mesPasado + 1).padStart(2, "0")}-01`;
+        const finStr = `${anio}-${String(mesPasado + 1).padStart(2, "0")}-31`;
+
+        const snapshot = await db.collection("reservas")
+            .where("fecha", ">=", inicioStr)
+            .where("fecha", "<=", finStr)
+            .get();
+
         const buffer = await construirReporteExcel(snapshot);
-
-        res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.set("Content-Disposition", "attachment; filename=reporte-mensual.xlsx");
 
         const batch = db.batch();
         snapshot.forEach((doc) => {
             const r = doc.data();
-            const fechaReserva = new Date(r.fecha + "T00:00:00");
-            const precio = Number(r.precio || 0);
-            const estaPagada = !!r.pagado;
-            if (fechaReserva >= hoy) return;
-            if (precio <= 0 || estaPagada) batch.delete(doc.ref);
+            if (!!r.pagado || Number(r.precio || 0) <= 0) batch.delete(doc.ref);
         });
         await batch.commit();
 
+        res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.set("Content-Disposition", "attachment; filename=reporte-mensual.xlsx");
         return res.status(200).send(Buffer.from(buffer));
     } catch (error) {
-        logger.error("Error generando reporte:", error);
-        return res.status(500).send("Error generando reporte");
+        logger.error(error);
+        return res.status(500).send("Error interno");
     }
 });
 
