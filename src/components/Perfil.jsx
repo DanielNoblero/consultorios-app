@@ -5,6 +5,7 @@ import { db } from "../firebaseConfig";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { updateEmail } from "firebase/auth";
+import { auth } from "../firebaseConfig";
 
 const Perfil = () => {
     const { user } = useAuth();
@@ -72,7 +73,7 @@ const Perfil = () => {
             // 🔹 Actualizar email en Auth si cambió
             if (form.email !== user.email) {
                 try {
-                    await updateEmail(user, form.email);
+                    await updateEmail(auth.currentUser, form.email);
                 } catch (err) {
                     if (err.code === "auth/requires-recent-login") {
                         setErrorMsg("Debes cerrar sesión y volver a iniciar sesión para cambiar tu email.");

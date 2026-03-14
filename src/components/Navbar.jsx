@@ -1,50 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
 
 import Logo from "../assets/Logo.png";
 
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
-    const [role, setRole] = useState(null);
-    const [isProfileComplete, setIsProfileComplete] = useState(false);
-    const [ready, setReady] = useState(false);
 
     const menuRef = useRef(null); // ⭐ para click afuera
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-
-    // Detectar datos del usuario
-    useEffect(() => {
-        const loadUserData = async () => {
-            if (!user) {
-                setRole(null);
-                setIsProfileComplete(false);
-                setReady(true);
-                return;
-            }
-
-            try {
-                const ref = doc(db, "usuarios", user.uid);
-                const snap = await getDoc(ref);
-
-                if (snap.exists()) {
-                    const data = snap.data();
-                    setRole(data.rol || "usuario");
-                    setIsProfileComplete(!!data.perfilCompleto);
-                }
-            } catch {
-                setRole("usuario");
-                setIsProfileComplete(false);
-            }
-
-            setReady(true);
-        };
-
-        loadUserData();
-    }, [user]);
+    const role = user?.rol || null;
+    const isProfileComplete = user?.perfilCompleto || false;
 
     // ⭐ Cerrar menú con scroll
     useEffect(() => {
@@ -83,14 +50,6 @@ export default function Navbar() {
         }
     };
 
-    if (!ready) {
-        return (
-            <div className="text-center py-4 text-blue-700 font-semibold">
-                Preparando tu sesión...
-            </div>
-        );
-    }
-
     const linkBase =
         "bg-white text-blue-700 hover:bg-gray-100 px-4 py-2 rounded-lg font-semibold transition shadow";
 
@@ -117,7 +76,7 @@ export default function Navbar() {
                         {user && isProfileComplete && (
                             <>
                                 <Link to="/" className={linkBase}>
-                                    Mis Reservar
+                                    Mis Reservas
                                 </Link>
                                 <Link to="/reservas" className={linkBase}>
                                     Reservar
@@ -129,9 +88,6 @@ export default function Navbar() {
                                     >
                                         Admin
                                     </Link>
-                                )}
-                                {role === "admin" && (
-                                    <Link to="/admin/backups" className="px-4 py-2 bg-yellow-200 text-yellow-900 font-semibold rounded-lg border border-yellow-400 shadow-sm hover:bg-yellow-300 transition">Reservas eliminadas</Link>
                                 )}
                             </>
                         )}
@@ -183,12 +139,12 @@ export default function Navbar() {
                             <div className="flex flex-col space-y-2 text-blue-900 font-semibold">
                                 {user && isProfileComplete && (
                                     <>
-                                    <Link
+                                        <Link
                                             to="/"
                                             onClick={() => setIsOpen(false)}
                                             className="w-full text-center py-2 bg-white/70 hover:bg-white rounded-lg transition shadow-sm"
                                         >
-                                            Mis Reservar
+                                            Mis Reservas
                                         </Link>
                                         <Link
                                             to="/reservas"
@@ -206,9 +162,6 @@ export default function Navbar() {
                                             >
                                                 Admin
                                             </Link>
-                                        )}
-                                        {role === "admin" && (
-                                            <Link to="/admin/backups" className="w-full text-center py-2 bg-white/70 hover:bg-white rounded-lg transition shadow-sm">Reservas eliminadas</Link>
                                         )}
                                     </>
                                 )}

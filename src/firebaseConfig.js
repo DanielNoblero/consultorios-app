@@ -39,6 +39,6 @@ export const db = initializeFirestore(app, {
 });
 
 // 🔹 Functions
-export const functions = getFunctions(app, "us-central1");
+export const functions = getFunctions(app, "southamerica-east1");
 
 export { app };

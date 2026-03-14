@@ -10,6 +10,7 @@ import AdminBackups from "./pages/AdminBackups.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Reservas from "./pages/Reservas.jsx";
 import Admin from "./pages/Admin.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 function App() {
   const { mostrarModal, precioData, aceptarCambio } = useCambioPrecio();
@@ -47,7 +48,9 @@ function App() {
           path="/dashboard"
           element={
             <PrivateRoute requireProfile>
-              <Dashboard />
+              <ErrorBoundary>
+                <Dashboard />
+            </ErrorBoundary>
             </PrivateRoute>
           }
         />
@@ -58,7 +61,9 @@ function App() {
           path="/"
           element={
             <PrivateRoute requireProfile>
-              <Dashboard />
+              <ErrorBoundary>
+                <Dashboard />
+            </ErrorBoundary>
             </PrivateRoute>
           }
         />

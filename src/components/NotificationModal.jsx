@@ -19,7 +19,7 @@ const NotificationModal = ({ isOpen, type, title, message, onClose }) => {
                     <h3 className="text-xl font-bold text-white">{title}</h3>
                 </div>
                 <div className="p-4 text-gray-700">
-                    <p dangerouslySetInnerHTML={{ __html: message }} />
+                    <p>{message}</p>
                 </div>
                 <div className="p-3 flex justify-end bg-gray-50">
                     <button

@@ -431,6 +431,7 @@ const Reservas = () => {
                         );
                     }}
                     showNotification={showNotification}
+                    user={user}
                 />
             )}
         </div>

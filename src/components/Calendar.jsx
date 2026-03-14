@@ -117,6 +117,7 @@ export default function Calendar({
 
                         const fechaStr = day.toISOString().split("T")[0];
                         const tieneReservas =
+                            isCurrentMonth &&
                             reservasExistentes.length > 0 &&
                             reservasExistentes.some((r) => r.fecha === fechaStr);
 

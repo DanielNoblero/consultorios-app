@@ -296,7 +296,7 @@ const Admin = () => {
             "⚠️ Esta acción eliminará la reserva y generará un backup. ¿Deseas continuar?",
             async () => {
                 try {
-                    const functions = getFunctions();
+                    const functions = getFunctions(undefined, "southamerica-east1");
                     const eliminarReserva = httpsCallable(functions, "eliminarReservaConBackup");
 
                     await eliminarReserva({
