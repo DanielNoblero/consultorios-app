@@ -11,8 +11,8 @@ export const getPreciosConfig = async () => {
       const data = snapshot.data();
 
       return {
-        precioBase: parseFloat(data.precioBase ?? 250),
-        precioDescuento: parseFloat(data.precioDescuento ?? 230),
+        precioBase: parseFloat(data.precioBase ?? 270),
+        precioDescuento: parseFloat(data.precioDescuento ?? 250),
         fechaCambio: data.fechaCambio ?? "1900-01-01"
       };
     }
@@ -21,8 +21,8 @@ export const getPreciosConfig = async () => {
   }
 
   return {
-    precioBase: 250,
-    precioDescuento: 230,
+    precioBase: 270,
+    precioDescuento: 250,
     fechaCambio: "1900-01-01"
   };
 };

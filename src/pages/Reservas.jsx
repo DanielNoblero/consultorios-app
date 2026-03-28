@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getISOWeek } from "date-fns";
 
 import { useAuth } from "../context/AuthContext";
-import { getPreciosConfig  } from "../utils/precioUtils";
+import { getPreciosConfig } from "../utils/precioUtils";
 import { generarHorarios } from "../utils/horariosUtils";
 import { getIniciales } from "../utils/userUtils";
 import { traerReservas, traerReservasUsuario } from "../utils/reservasUtils";
@@ -64,7 +64,7 @@ const Reservas = () => {
     // PRECIO GLOBAL
     // ---------------------------------------------------
     const cargarPrecioBase = useCallback(async () => {
-        const precio = await getPreciosConfig ();
+        const precio = await getPreciosConfig();
         setPrecioBase(precio);
     }, []);
 
@@ -262,7 +262,6 @@ const Reservas = () => {
 
                 {/* CALENDARIO */}
                 <Calendar
-                    key={fechaSeleccionada.toISOString() + reservasExistentes.length}
                     fechaSeleccionada={fechaSeleccionada}
                     setFechaSeleccionada={setFechaSeleccionada}
                     reservasExistentes={reservasExistentes}
@@ -273,7 +272,7 @@ const Reservas = () => {
                 {fechaSeleccionada && (
                     <div className="mt-10">
                         <h3 className="text-xl font-bold mb-4 border-b pb-2">
-                            Horarios Disponibles — {fechaSeleccionada.toLocaleDateString("es-ES")}
+                            Horarios Disponibles — {getFechaStr(fechaSeleccionada)}
                         </h3>
 
                         <div className="flex flex-col gap-3">

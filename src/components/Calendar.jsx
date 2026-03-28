@@ -41,30 +41,11 @@ export default function Calendar({
     const isToday = (date) => isSameDay(date, new Date());
 
     const handlePrevMonth = () => {
-        const nuevo = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-        setCurrentMonth(nuevo);
-
-        // 🔥 Si fechaSeleccionada quedó en un mes pasado → volver a hoy
-        const f = new Date(fechaSeleccionada);
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
-
-        if (f < hoy) {
-            setFechaSeleccionada(new Date());
-        }
+        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
     };
 
     const handleNextMonth = () => {
-        const nuevo = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-        setCurrentMonth(nuevo);
-
-        const f = new Date(fechaSeleccionada);
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
-
-        if (f < hoy) {
-            setFechaSeleccionada(new Date());
-        }
+        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
     };
 
     return (
@@ -130,7 +111,9 @@ export default function Calendar({
                             ${isSelected ? "bg-blue-600 text-white ring-2 ring-blue-800" : ""}
                             ${tieneReservas && isCurrentMonth
                                 ? "bg-red-400 text-white"
-                                : "bg-green-200 text-gray-800"
+                                : isCurrentMonth
+                                    ? "bg-green-200 text-gray-800"
+                                    : "bg-green-100 text-gray-400"
                             }
                         `;
 
@@ -139,7 +122,11 @@ export default function Calendar({
                                 key={`${wi}-${di}`}
                                 className={classes}
                                 onClick={() => {
-                                    if (!disabled) setFechaSeleccionada(day);
+                                    if (disabled) return;
+                                    if (day.getMonth() !== currentMonth.getMonth()) {
+                                        setCurrentMonth(new Date(day.getFullYear(), day.getMonth(), 1));
+                                    }
+                                    setFechaSeleccionada(day);
                                 }}
                             >
                                 {day.getDate()}

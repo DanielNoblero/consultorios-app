@@ -154,7 +154,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
 
     const [reservas, setReservas] = useState([]);
-    const [precioGlobal, setPrecioGlobal] = useState(null);
+    const [precioGlobal, setPrecioGlobal] = useState(270);
     const [totalSemana, setTotalSemana] = useState(0);
     const [totalMes, setTotalMes] = useState(0);
     const [reservaACancelar, setReservaACancelar] = useState(null);
@@ -202,11 +202,19 @@ const Dashboard = () => {
 
     // 🔹 Suscripción a reservas del psicólogo
     useEffect(() => {
-        if (!user?.uid || precioGlobal === null) return;
+        if (!user?.uid) return;
+
+        const hoy = new Date();
+        const desdeStr = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+            .toISOString().split("T")[0];
+        const hastaStr = new Date(hoy.getFullYear(), hoy.getMonth() + 2, 0)
+            .toISOString().split("T")[0];
 
         const q = query(
             collection(db, "reservas"),
-            where("psicologoId", "==", user.uid)
+            where("psicologoId", "==", user.uid),
+            where("fecha", ">=", desdeStr),
+            where("fecha", "<=", hastaStr)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {

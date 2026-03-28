@@ -83,8 +83,8 @@ const Admin = () => {
     const [psicologos, setPsicologos] = useState([]);
     const [reservas, setReservas] = useState([]);
 
-    const [precioConsulta, setPrecioConsulta] = useState(250);
-    const [precioDescuento, setPrecioDescuento] = useState(230);
+    const [precioConsulta, setPrecioConsulta] = useState(270);
+    const [precioDescuento, setPrecioDescuento] = useState(250);
 
     const [acordeonesAbiertos, setAcordeonesAbiertos] = useState({});
     const [expandAll, setExpandAll] = useState(false);
@@ -142,8 +142,8 @@ const Admin = () => {
                 const snap = await getDoc(ref);
                 if (snap.exists()) {
                     const data = snap.data();
-                    setPrecioConsulta(parseFloat(data.precioBase || data.precio || 250));
-                    setPrecioDescuento(parseFloat(data.precioDescuento || 230));
+                    setPrecioConsulta(parseFloat(data.precioBase || data.precio || 270));
+                    setPrecioDescuento(parseFloat(data.precioDescuento || 250));
                 }
             } catch (e) {
                 console.error("Error cargando configuración de precios", e);
