@@ -1,14 +1,12 @@
 import React from "react";
-import { deleteDoc, doc } from "firebase/firestore";
-import { db } from "../firebaseConfig";
 import { eliminarReserva } from "../utils/reservasUtils";
 
-const CancelarReservaModal = ({ reserva, onClose, onCancelSuccess, showNotification, user }) => {
+const CancelarReservaModal = ({ reserva, onClose, onCancelSuccess, showNotification }) => {
     if (!reserva) return null;
 
     const handleCancelar = async () => {
         try {
-            await eliminarReserva(reserva, false, user);
+            await eliminarReserva(reserva, false);
             showNotification("success", "Cancelación Exitosa", "La reserva se canceló correctamente.");
             await onCancelSuccess();
             onClose();

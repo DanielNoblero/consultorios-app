@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { confirmarReserva } from "../utils/reservasUtils";
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 const ConfirmarReservaModal = ({
     reservaAConfirmar,
@@ -25,38 +25,39 @@ const ConfirmarReservaModal = ({
     const cerrar = () => setIsReservaModalOpen(false);
 
     const confirmar = async () => {
-        // Si ya está procesando, no hacer nada
         if (isConfirming) return;
 
         try {
             setIsConfirming(true);
 
-            await confirmarReserva({
+            const functions = getFunctions(undefined, "southamerica-east1");
+            const confirmarReservaCF = httpsCallable(functions, "confirmarReservaCF");
+
+            const { data: resultado } = await confirmarReservaCF({
                 reservaBase: reservaAConfirmar,
                 tipoReserva,
                 recurrenciaTipo,
                 recurrenciaCantidad,
-                psicologo: user,
             });
 
-            showNotification(
-                "success",
-                "Reserva creada",
-                "La reserva fue registrada correctamente."
-            );
+            if (!resultado?.ok) {
+                showNotification("error", "Error", resultado?.mensaje || "No se pudo confirmar la reserva.");
+                return;
+            }
+
+            if (resultado?.parcial) {
+                showNotification("warning", "Reserva parcial", resultado.mensaje);
+            } else {
+                showNotification("success", "Reserva creada", "La reserva fue registrada correctamente.");
+            }
 
             cerrar();
             await cargarReservas();
             await actualizarMisReservas();
         } catch (error) {
             console.error(error);
-            showNotification(
-                "error",
-                "Error",
-                "Ocurrió un problema al confirmar la reserva."
-            );
+            showNotification("error", "Error", "Ocurrió un problema al confirmar la reserva.");
         } finally {
-            // por las dudas, lo volvemos a habilitar
             setIsConfirming(false);
         }
     };

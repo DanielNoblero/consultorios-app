@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebaseConfig";
 import {
@@ -34,6 +34,39 @@ const Notification = ({ tipo, mensaje }) => (
         {mensaje}
     </div>
 );
+
+const EliminarMesModal = ({ isOpen, onClose, onConfirm, nombreMes, cantidad, loading }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+                <h3 className="text-2xl font-extrabold mb-3 text-red-600 border-b pb-2">
+                    ⚠️ Eliminar reservas del mes
+                </h3>
+                <p className="text-gray-700 mb-2">
+                    ¿Estás seguro de que deseas eliminar las <strong>{cantidad}</strong> reservas de <strong>{nombreMes}</strong>?
+                </p>
+                <p className="text-sm text-red-700 font-semibold">Esta acción eliminará todas las reservas del mes, incluyendo pasadas y futuras.</p>
+                <div className="flex justify-end mt-6 gap-3">
+                    <button
+                        onClick={onClose}
+                        disabled={loading}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition font-medium disabled:opacity-50"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={loading}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold shadow-md disabled:opacity-50"
+                    >
+                        {loading ? "Eliminando..." : "Sí, eliminar todo"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const CancelarModal = ({ isOpen, onClose, onConfirm, reserva }) => {
     if (!isOpen || !reserva) return null;
@@ -154,6 +187,8 @@ const Dashboard = () => {
     const navigate = useNavigate();
 
     const [reservas, setReservas] = useState([]);
+    const [loadingReservas, setLoadingReservas] = useState(true);
+    const [errorReservas, setErrorReservas] = useState(null);
     const [precioGlobal, setPrecioGlobal] = useState(270);
     const [totalSemana, setTotalSemana] = useState(0);
     const [totalMes, setTotalMes] = useState(0);
@@ -168,14 +203,24 @@ const Dashboard = () => {
     const [totalMesAnterior, setTotalMesAnterior] = useState(0);
     const [vista, setVista] = useState("semana");
     const [reservasMes, setReservasMes] = useState({ semanas: {}, plano: [] });
-    const [totalMesVista, setTotalMesVista] = useState(0);
     const [reservasMesSiguiente, setReservasMesSiguiente] = useState([]);
     const [modalRecurrente, setModalRecurrente] = useState(null);
+    const [modalEliminarMes, setModalEliminarMes] = useState(false);
+    const [eliminandoMes, setEliminandoMes] = useState(false);
+
+    // Refs
+    const notifTimerRef = useRef(null);
 
     const capitalize = (str) => {
         if (!str) return "";
         return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
     };
+
+    // Limpiar timer de notificación al desmontar
+    useEffect(() => {
+        return () => { if (notifTimerRef.current) clearTimeout(notifTimerRef.current); };
+    }, []);
+
 
     // 🔹 Cargar precio global
     useEffect(() => {
@@ -218,8 +263,9 @@ const Dashboard = () => {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const reservasArray = snapshot.docs.map((doc) => {
-                const data = { id: doc.id, ...doc.data() };
+            setErrorReservas(null);
+            const reservasArray = snapshot.docs.map((snap) => {
+                const data = { id: snap.id, ...snap.data() };
                 const precio = parseFloat(data.precio ?? precioGlobal);
                 return { ...data, precio };
             });
@@ -281,8 +327,7 @@ const Dashboard = () => {
                 return f.getMonth() === month && f.getFullYear() === year;
             });
 
-            const total = reservasMesActual.reduce((acc, r) => acc + (r.precio || 0), 0);
-            setTotalMesVista(total);
+
 
             const semanasAgrupadas = {};
             reservasMesActual.forEach((r) => {
@@ -300,10 +345,15 @@ const Dashboard = () => {
                 return f.getMonth() === nextMonth && f.getFullYear() === nextYear;
             });
             setReservasMesSiguiente(reservasSiguiente);
+            setLoadingReservas(false);
+        }, (error) => {
+            console.error("Error en onSnapshot de reservas:", error);
+            setErrorReservas(error.code || "Error al cargar reservas");
+            setLoadingReservas(false);
         });
 
         return () => unsubscribe();
-    }, [user, precioGlobal]);
+    }, [user?.uid, precioGlobal]);
 
     const handleConfirmCancel = (reserva) => {
         setReservaACancelar(reserva);
@@ -311,8 +361,9 @@ const Dashboard = () => {
     };
 
     const mostrarNotificacion = (tipo, mensaje) => {
+        if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
         setNotificacion({ tipo, mensaje });
-        setTimeout(() => setNotificacion(null), 3000);
+        notifTimerRef.current = setTimeout(() => setNotificacion(null), 3000);
     };
 
     const handleCancelar = async () => {
@@ -334,7 +385,7 @@ const Dashboard = () => {
         }
 
         try {
-            await eliminarReserva(reservaACancelar, false, user);
+            await eliminarReserva(reservaACancelar, false);
             mostrarNotificacion("success", "✅ Reserva cancelada correctamente.");
             setReservaACancelar(null);
         } catch (error) {
@@ -345,7 +396,7 @@ const Dashboard = () => {
 
     const eliminarSoloUna = async () => {
         try {
-            await eliminarReserva(modalRecurrente, false, user);
+            await eliminarReserva(modalRecurrente, false);
             setModalRecurrente(null);
             mostrarNotificacion("success", "Reserva eliminada correctamente.");
         } catch (e) {
@@ -356,12 +407,37 @@ const Dashboard = () => {
 
     const eliminarTodaLaSerie = async () => {
         try {
-            await eliminarReserva(modalRecurrente, true, user);
+            await eliminarReserva(modalRecurrente, true);
             setModalRecurrente(null);
             mostrarNotificacion("success", "Toda la serie recurrente fue eliminada.");
         } catch (e) {
             console.error(e);
             mostrarNotificacion("error", "Error al eliminar la serie.");
+        }
+    };
+
+    const eliminarReservasMes = async () => {
+        const lista = vista === "mes" ? reservasMes.plano : reservasMesSiguiente;
+        const ahora24 = new Date();
+        const cancelables = lista.filter((r) => {
+            const fechaReserva = new Date(`${r.fecha}T${r.horaInicio}`);
+            return fechaReserva - ahora24 >= 24 * 60 * 60 * 1000;
+        });
+        if (cancelables.length === 0) {
+            mostrarNotificacion("error", "⛔ No hay reservas cancelables (requieren más de 24 hs de anticipación).");
+            setModalEliminarMes(false);
+            return;
+        }
+        setEliminandoMes(true);
+        try {
+            await Promise.all(cancelables.map((r) => eliminarReserva(r, false)));
+            mostrarNotificacion("success", `✅ Se eliminaron ${cancelables.length} reservas correctamente.`);
+        } catch (e) {
+            console.error(e);
+            mostrarNotificacion("error", "❌ Error al eliminar las reservas del mes.");
+        } finally {
+            setEliminandoMes(false);
+            setModalEliminarMes(false);
         }
     };
 
@@ -384,6 +460,12 @@ const Dashboard = () => {
     const nombreCompleto = `${nombreUsuario} ${apellidoUsuario}`.trim();
     const iniciales = (nombreUsuario?.[0] || "U") + (apellidoUsuario?.[0] || "");
     const esAdmin = user?.rol === "admin" || user?.isAdmin;
+
+    const listaMesVista = vista === "mes" ? reservasMes.plano : reservasMesSiguiente;
+    const cancelablesMesVista = listaMesVista.filter((r) => {
+        const fechaReserva = new Date(`${r.fecha}T${r.horaInicio}`);
+        return fechaReserva - ahora >= 24 * 60 * 60 * 1000;
+    });
 
     // ------------------- UI PRINCIPAL -------------------
     return (
@@ -451,15 +533,39 @@ const Dashboard = () => {
                                 {vista === "mesSiguiente" && `Próximas reservas — ${nombreMesSiguiente}`}{" "}
                                 ({vista === "semana" ? reservasSemanaMostrar.length : vista === "mes" ? reservasMes.plano.length : reservasMesSiguiente.length})
                             </h2>
-                            <button
-                                onClick={() => setMostrarSemana(!mostrarSemana)}
-                                className="text-xs sm:text-sm font-semibold text-sky-600 hover:text-sky-800"
-                            >
-                                {mostrarSemana ? "Contraer ▲" : "Extender ▼"}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {(vista === "mes" || vista === "mesSiguiente") && (
+                                    <button
+                                        onClick={() => setModalEliminarMes(true)}
+                                        className="px-3 py-1.5 bg-red-100 text-red-700 border border-red-300 rounded-lg hover:bg-red-200 transition text-xs font-semibold"
+                                    >
+                                        🗑 Eliminar mes
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setMostrarSemana(!mostrarSemana)}
+                                    className="text-xs sm:text-sm font-semibold text-sky-600 hover:text-sky-800"
+                                >
+                                    {mostrarSemana ? "Contraer ▲" : "Extender ▼"}
+                                </button>
+                            </div>
                         </div>
 
-                        {vista === "semana" && mostrarSemana && (
+                        {loadingReservas && (
+                            <div className="p-4 rounded-xl bg-sky-50 text-sky-700 text-sm animate-pulse">
+                                Cargando reservas...
+                            </div>
+                        )}
+
+                        {errorReservas && (
+                            <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                                <p className="font-semibold">❌ Error al cargar las reservas</p>
+                                <p className="text-xs mt-1 text-red-500">{errorReservas}</p>
+                                <p className="text-xs mt-2">Verificá tu conexión o contactá al administrador.</p>
+                            </div>
+                        )}
+
+                        {!loadingReservas && !errorReservas && vista === "semana" && mostrarSemana && (
                             reservasSemanaMostrar.length === 0 ? (
                                 <div className="p-4 rounded-xl bg-sky-50 text-sky-800 text-sm sm:text-base">
                                     🎉 No tienes reservas esta semana.{" "}
@@ -476,7 +582,7 @@ const Dashboard = () => {
                             )
                         )}
 
-                        {vista === "mes" && mostrarSemana && (
+                        {!loadingReservas && !errorReservas && vista === "mes" && mostrarSemana && (
                             <ul className="space-y-4">
                                 {reservasMes.plano.map((r) => (
                                     <ReservaItem key={r.id} r={r} ahora={ahora} esAdmin={esAdmin} setModalRecurrente={setModalRecurrente} handleConfirmCancel={handleConfirmCancel} />
@@ -492,7 +598,7 @@ const Dashboard = () => {
                             </ul>
                         )}
 
-                        {vista === "mesSiguiente" && mostrarSemana && (
+                        {!loadingReservas && !errorReservas && vista === "mesSiguiente" && mostrarSemana && (
                             <ul className="space-y-4">
                                 {reservasMesSiguiente.map((r) => (
                                     <ReservaItem key={r.id} r={r} ahora={ahora} esAdmin={esAdmin} setModalRecurrente={setModalRecurrente} handleConfirmCancel={handleConfirmCancel} />
@@ -564,6 +670,15 @@ const Dashboard = () => {
                 onEliminarUna={eliminarSoloUna}
                 onEliminarTodas={eliminarTodaLaSerie}
                 reserva={modalRecurrente}
+            />
+
+            <EliminarMesModal
+                isOpen={modalEliminarMes}
+                onClose={() => setModalEliminarMes(false)}
+                onConfirm={eliminarReservasMes}
+                nombreMes={vista === "mes" ? nombreMesActual : nombreMesSiguiente}
+                cantidad={cancelablesMesVista.length}
+                loading={eliminandoMes}
             />
         </div>
     );

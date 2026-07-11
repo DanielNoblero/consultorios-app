@@ -21,9 +21,8 @@ import {
     ChevronDown,
     ChevronUp,
 } from "lucide-react";
-
+import { eliminarReserva } from "../utils/reservasUtils";
 import { marcarMesPagadoUsuario, marcarMesDeudaUsuario, } from "../utils/pagosUtils";
-import { getFunctions, httpsCallable } from "firebase/functions";
 const CONFIG_DOC_ID = "precioConsulta";
 
 // ============================
@@ -291,22 +290,23 @@ const Admin = () => {
         parseFloat(deudaPorPsicologo[psicologoId] || 0).toFixed(2);
 
     const handleEliminar = async (reservaId) => {
+        const reserva = reservas.find(r => r.id === reservaId);
+
+        if (!reserva) {
+            openModal("❌ Error", "No se encontró la reserva. Recargá la página e intentá de nuevo.");
+            return;
+        }
+
         openModal(
             "Eliminar Reserva",
-            "⚠️ Esta acción eliminará la reserva y generará un backup. ¿Deseas continuar?",
+            "⚠️ Esta acción eliminará la reserva permanentemente. ¿Deseas continuar?",
             async () => {
                 try {
-                    const functions = getFunctions(undefined, "southamerica-east1");
-                    const eliminarReserva = httpsCallable(functions, "eliminarReservaConBackup");
-
-                    await eliminarReserva({
-                        reservaId,
-                        motivo: "Eliminación manual desde panel admin"
-                    });
+                    await eliminarReserva(reserva, false);
 
                     openModal(
                         "🗑️ Reserva eliminada",
-                        "La reserva fue eliminada y guardada en el backup correctamente."
+                        "La reserva fue eliminada correctamente."
                     );
                 } catch (error) {
                     console.error(error);
@@ -497,13 +497,15 @@ const Admin = () => {
                         </p>
                     </div>
                 </div>
-
-                <button
-                    onClick={generarReporte}
-                    className="text-white px-6 py-3 rounded-lg transition font-bold shadow-md bg-green-600 hover:bg-green-700 flex items-center justify-center mt-4"
-                >
-                    Generar Reporte Mensual
-                </button>
+                <div className="mt-6 text-sm text-gray-600">
+                    <h2>Generar Reporte del mes anterior</h2>
+                    <button
+                        onClick={generarReporte}
+                        className="text-white px-6 py-3 rounded-lg transition font-bold shadow-md bg-green-600 hover:bg-green-700 flex items-center justify-center mt-4"
+                    >
+                        Generar Reporte Mensual
+                    </button>
+                </div>
             </div>
 
             {/* --- CONFIGURACIÓN --- */}

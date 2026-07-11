@@ -64,8 +64,8 @@ const Reservas = () => {
     // PRECIO GLOBAL
     // ---------------------------------------------------
     const cargarPrecioBase = useCallback(async () => {
-        const precio = await getPreciosConfig();
-        setPrecioBase(precio);
+        const { precioBase } = await getPreciosConfig();
+        setPrecioBase(precioBase);
     }, []);
 
     useEffect(() => {
@@ -430,7 +430,6 @@ const Reservas = () => {
                         );
                     }}
                     showNotification={showNotification}
-                    user={user}
                 />
             )}
         </div>

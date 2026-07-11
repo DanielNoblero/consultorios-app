@@ -71,22 +71,5 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // --------------------------------------------------
-    // BACKUP DE RESERVAS ELIMINADAS
-    // --------------------------------------------------
-    match /reservas_backup/{backupId} {
-
-      // 🔐 Solo admin puede leer backups
-      allow read: if isAdmin();
-
-      // ✍️ Se crean automáticamente al borrar reservas
-      allow create: if isLoggedIn();
-
-      // 🟡 Solo admin puede marcar como restaurado
-      allow update: if isAdmin();
-
-      // ❌ Nunca se borran
-      allow delete: if false;
-    }
   }
 }

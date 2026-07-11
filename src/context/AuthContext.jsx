@@ -14,6 +14,8 @@ import {
     onAuthStateChanged,
     GoogleAuthProvider,
     signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
 } from "firebase/auth";
 import { auth, db } from "../firebaseConfig";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
@@ -24,6 +26,9 @@ export const useAuth = () => useContext(AuthContext);
 
 // 🟦 Instancia única del provider de Google (no se recrea en cada render)
 const googleProvider = new GoogleAuthProvider();
+
+// 🟦 Detectar si es un navegador mobile (popup falla ahí, redirect funciona bien)
+const esMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // =====================================================
 // ensureUserDoc
@@ -56,6 +61,19 @@ const ensureUserDoc = async (firebaseUser) => {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null); // mezcla Auth + Firestore
     const [loading, setLoading] = useState(true);
+
+    // 🔹 Capturar el resultado del login por redirect (mobile)
+    useEffect(() => {
+        getRedirectResult(auth)
+            .then(async (result) => {
+                if (result?.user) {
+                    await ensureUserDoc(result.user);
+                }
+            })
+            .catch((error) => {
+                console.error("Error en redirect de Google:", error);
+            });
+    }, []);
 
     useEffect(() => {
         let unsubscribeUserDoc = null;
@@ -142,9 +160,16 @@ export const AuthProvider = ({ children }) => {
         return signInWithEmailAndPassword(auth, email, password);
     };
 
+    // ✅ Fix: usa redirect en mobile (popup falla en Chrome Android/iOS),
+    // y popup en desktop (mejor UX, no saca al usuario de la pestaña)
     const loginWithGoogle = async () => {
-        const cred = await signInWithPopup(auth, googleProvider);
-        await ensureUserDoc(cred.user);
+        if (esMobile()) {
+            await signInWithRedirect(auth, googleProvider);
+            // El resultado se procesa en el useEffect de getRedirectResult
+        } else {
+            const cred = await signInWithPopup(auth, googleProvider);
+            await ensureUserDoc(cred.user);
+        }
     };
 
     const logout = () => signOut(auth);
